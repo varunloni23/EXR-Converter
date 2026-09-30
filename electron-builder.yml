@@ -1,5 +1,10 @@
 appId: com.exrconverter.app
 productName: EXR Converter
+publish:
+  provider: github
+  owner: varunloni23
+  repo: EXR-Converter
+  releaseType: release
 directories:
   output: release
   buildResources: build

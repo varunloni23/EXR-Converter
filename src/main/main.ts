@@ -16,6 +16,7 @@ import { fileService } from './services/fileService';
 import { conversionManager } from './services/conversionManager';
 import { settingsService } from './services/settingsService';
 import { historyService } from './services/historyService';
+import { updateService } from './services/updateService';
 import { ConversionSettings, ExrSequence, FrameComparisonReport, FolderComparisonResult } from '../shared/types';
 
 protocol.registerSchemesAsPrivileged([
@@ -191,6 +192,7 @@ function createWindow(forceShow: boolean = false) {
   });
 
   conversionManager.setMainWindow(mainWindow);
+  updateService.setWindow(mainWindow);
 
   mainWindow.webContents.on('preload-error', (event, preloadPath, error) => {
     console.error(`[PRELOAD ERROR] at ${preloadPath}:`, error);
@@ -209,6 +211,11 @@ function createWindow(forceShow: boolean = false) {
 
   mainWindow.webContents.on('did-finish-load', () => {
     isRendererReady = true;
+    if (app.isPackaged) {
+      setTimeout(() => {
+        updateService.checkForUpdates().catch((err) => logger.warn(`Background update check error: ${err}`));
+      }, 4000);
+    }
   });
 
   // Load URL
@@ -559,6 +566,20 @@ function registerIpcHandlers() {
     } catch (e) {
       logger.warn(`Could not show notification: ${e}`);
     }
+    return true;
+  });
+
+  // 13. In-App Auto Updater
+  ipcMain.handle('updater:check', async () => {
+    return updateService.checkForUpdates();
+  });
+
+  ipcMain.handle('updater:getStatus', async () => {
+    return updateService.getStatus();
+  });
+
+  ipcMain.handle('updater:quitAndInstall', async () => {
+    updateService.quitAndInstall();
     return true;
   });
 }

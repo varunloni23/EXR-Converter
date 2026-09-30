@@ -64,7 +64,11 @@ if (fs.existsSync(winFfmpeg)) {
 
     console.log('   Extracting ffmpeg.exe and ffprobe.exe ...');
     fs.mkdirSync(tempExtract, { recursive: true });
-    execSync(`unzip -q -o "${tempZip}" -d "${tempExtract}"`);
+    if (process.platform === 'win32') {
+      execSync(`tar -xf "${tempZip}" -C "${tempExtract}"`);
+    } else {
+      execSync(`unzip -q -o "${tempZip}" -d "${tempExtract}"`);
+    }
 
     // Find extracted ffmpeg.exe
     const findBinary = (dir, name) => {

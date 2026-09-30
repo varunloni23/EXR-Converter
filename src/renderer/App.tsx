@@ -16,6 +16,7 @@ import { CancelModal } from './components/CancelModal';
 import { HelpModal } from './components/HelpModal';
 import { QueueDrawer } from './components/QueueDrawer';
 import { FolderComparisonModal } from './components/FolderComparisonModal';
+import { UpdateNotification } from './components/UpdateNotification';
 import {
   ConversionJob,
   ConversionSettings,
@@ -1084,6 +1085,8 @@ export default function App() {
         defaultTargetDir={comparisonTargetDir || outputFolder || ''}
         defaultExpectedStart={settings.expectedStartFrame || 1001}
       />
+
+      <UpdateNotification />
     </div>
   );
 }

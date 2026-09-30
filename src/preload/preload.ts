@@ -10,6 +10,7 @@ import {
   FileCollisionResult,
   FrameComparisonReport,
   FolderComparisonResult,
+  UpdateStatus,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -70,6 +71,11 @@ export interface ElectronAPI {
     report: FolderComparisonResult
   ) => Promise<string | null>;
 
+  // Auto Updater
+  checkForUpdates: () => Promise<UpdateStatus>;
+  getUpdateStatus: () => Promise<UpdateStatus>;
+  quitAndInstallUpdate: () => Promise<boolean>;
+
   // Subscriptions
   onOpenPath: (callback: (data: { path: string; autoStart?: boolean } | string) => void) => () => void;
   onProgress: (callback: (job: ConversionJob) => void) => () => void;
@@ -78,6 +84,7 @@ export interface ElectronAPI {
   onJobCancelled: (callback: (job: ConversionJob) => void) => () => void;
   onJobsUpdate: (callback: (jobs: ConversionJob[]) => void) => () => void;
   onNewLog: (callback: (log: LogEntry) => void) => () => void;
+  onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
 }
 
 const api: ElectronAPI = {
@@ -122,6 +129,10 @@ const api: ElectronAPI = {
   saveFolderComparisonReport: (targetDir, report) =>
     ipcRenderer.invoke('sequence:saveFolderComparisonReport', targetDir, report),
 
+  checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+  getUpdateStatus: () => ipcRenderer.invoke('updater:getStatus'),
+  quitAndInstallUpdate: () => ipcRenderer.invoke('updater:quitAndInstall'),
+
   onOpenPath: (callback) => {
     const handler = (_: any, data: { path: string; autoStart?: boolean } | string) => callback(data);
     ipcRenderer.on('app:openPath', handler);
@@ -157,6 +168,11 @@ const api: ElectronAPI = {
     const handler = (_: any, log: LogEntry) => callback(log);
     ipcRenderer.on('log:entry', handler);
     return () => ipcRenderer.removeListener('log:entry', handler);
+  },
+  onUpdateStatus: (callback) => {
+    const handler = (_: any, status: UpdateStatus) => callback(status);
+    ipcRenderer.on('updater:status', handler);
+    return () => ipcRenderer.removeListener('updater:status', handler);
   },
 };
 

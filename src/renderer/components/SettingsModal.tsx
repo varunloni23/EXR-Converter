@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Cpu, Zap, HardDrive, Check, X, Shield, Info } from 'lucide-react';
+import { Settings, Cpu, Zap, HardDrive, Check, X, Shield, Info, RefreshCw } from 'lucide-react';
 import { ConversionSettings, HardwareInfo } from '../../shared/types';
 
 interface SettingsModalProps {
@@ -122,6 +122,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               );
             })}
           </div>
+        </div>
+
+        {/* Updates Section */}
+        <div className="mb-5 p-3 rounded-lg bg-studio-bg border border-studio-border flex items-center justify-between">
+          <div className="flex items-center space-x-2.5">
+            <RefreshCw className="w-4 h-4 text-studio-accent" />
+            <div>
+              <span className="text-xs font-semibold text-studio-text block">Software Updates</span>
+              <span className="text-[11px] text-studio-textMuted block">Current version v1.0.0 • Auto-checks on startup</span>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              if (window.electronAPI?.checkForUpdates) {
+                window.electronAPI.checkForUpdates();
+              }
+            }}
+            className="px-3 py-1.5 rounded-lg border border-studio-border hover:border-studio-accent text-xs font-medium text-studio-text hover:text-white transition-colors cursor-pointer"
+          >
+            Check Now
+          </button>
         </div>
 
         {/* Security & Offline Notice */}

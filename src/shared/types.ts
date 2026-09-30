@@ -197,3 +197,24 @@ export interface ScanResult {
   folderPath: string;
   error?: string;
 }
+
+export type UpdateState =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error';
+
+export interface UpdateStatus {
+  state: UpdateState;
+  version?: string;
+  releaseDate?: string;
+  releaseNotes?: string;
+  progressPercent?: number;
+  bytesPerSecond?: number;
+  transferredBytes?: number;
+  totalBytes?: number;
+  error?: string;
+}
