@@ -454,7 +454,14 @@ export default function App() {
         const firstSeq = result.sequences[0];
         setSelectedSequence(firstSeq);
 
-        const activeFmt = targetFormat || settings.outputFormat || 'mov';
+        const isVideoInput =
+          firstSeq.extension === '.mov' ||
+          firstSeq.extension === '.mp4' ||
+          firstSeq.extension === 'mov' ||
+          firstSeq.extension === 'mp4';
+        const activeFmt = targetFormat || (isVideoInput ? 'jpg' : (settings.outputFormat || 'mov'));
+        const activeMode = isVideoInput ? 'individual' : (activeFmt === 'jpg' ? 'individual' : (settings.conversionMode || 'sequence'));
+
         const initialOutFolder = settings.createSubfolder !== false
           ? getSiblingOutputDir(defaultOutFolder, activeFmt)
           : defaultOutFolder;
@@ -468,6 +475,7 @@ export default function App() {
         setSettings((prev) => ({
           ...prev,
           outputFormat: activeFmt,
+          conversionMode: activeMode,
           outputFolder: initialOutFolder,
           outputFileName: fileName,
           targetWidth: dims.w,
@@ -500,7 +508,7 @@ export default function App() {
           fileName,
         };
       } else {
-        alert('No .exr image sequence detected in the chosen folder or files.');
+        alert('No image sequence or video detected in the chosen folder or files.');
         return null;
       }
     } catch (err: any) {

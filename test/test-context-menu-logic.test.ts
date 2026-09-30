@@ -36,7 +36,45 @@ async function runTest() {
     throw new Error(`Expected full sequence with multiple frames for single file right-click, got ${singleResult.sequences[0]?.frameCount}`);
   }
 
-  console.log('\n🎉 ALL CONTEXT MENU LOGIC TESTS PASSED!\n');
+  // 3. Test Right-Click on Single MOV File (Detects video sequence)
+  console.log('\n3. Simulating right-click on single MOV file...');
+  const sampleMov = '/tmp/test_sample.mov';
+  const movResult = await sequenceDetector.scanDirectory(
+    sampleMov,
+    ffmpegService.getFfprobePath(),
+    true,
+    false
+  );
+  console.log(`   ✓ Found ${movResult.sequences.length} sequence(s)`);
+  console.log(`   ✓ Sequence name: ${movResult.sequences[0]?.sequenceName}`);
+  console.log(`   ✓ Extension: ${movResult.sequences[0]?.extension}`);
+  console.log(`   ✓ Frame count: ${movResult.sequences[0]?.frameCount}`);
+  console.log(`   ✓ Resolution: ${movResult.sequences[0]?.width}x${movResult.sequences[0]?.height}`);
+  if (movResult.sequences.length === 0 || movResult.sequences[0]?.extension !== '.mov') {
+    throw new Error('Expected video sequence to be detected for MOV file');
+  }
+
+  // 4. Test Right-Click on MOV Folder (e.g. folder containing .mov)
+  console.log('\n4. Simulating right-click on folder containing MOV...');
+  const movFolder = '/tmp/test_mov_dir';
+  const fs = await import('fs');
+  if (!fs.existsSync(movFolder)) fs.mkdirSync(movFolder, { recursive: true });
+  fs.copyFileSync(sampleMov, path.join(movFolder, 'STRM_E1_0370.mov'));
+
+  const movFolderResult = await sequenceDetector.scanDirectory(
+    movFolder,
+    ffmpegService.getFfprobePath(),
+    true,
+    false
+  );
+  console.log(`   ✓ Found ${movFolderResult.sequences.length} sequence(s)`);
+  console.log(`   ✓ Sequence name: ${movFolderResult.sequences[0]?.sequenceName}`);
+  console.log(`   ✓ Extension: ${movFolderResult.sequences[0]?.extension}`);
+  if (movFolderResult.sequences.length === 0) {
+    throw new Error('Expected video sequence to be detected for folder containing MOV');
+  }
+
+  console.log('\n🎉 ALL CONTEXT MENU LOGIC TESTS (EXR & MOV) PASSED!\n');
 }
 
 runTest().catch((err) => {

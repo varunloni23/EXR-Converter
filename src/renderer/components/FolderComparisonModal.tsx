@@ -71,7 +71,19 @@ export const FolderComparisonModal: React.FC<FolderComparisonModalProps> = ({
       const cleanSrc = defaultSourceDir.replace(/[/\\]+$/, '');
       const parentDir = cleanSrc.replace(/[/\\][^/\\]+$/, '');
       const baseName = cleanSrc.split(/[/\\]/).filter(Boolean).pop() || '';
-      const cleanBase = baseName.replace(/_(JPEG|MOV|MP4)$/i, '');
+      const isConvertedFolder = /_(JPEG|MOV|MP4)$/i.test(baseName) || /\.(mov|mp4)$/i.test(cleanSrc);
+      const cleanBase = baseName.replace(/_(JPEG|MOV|MP4)$/i, '').replace(/\.(mov|mp4)$/i, '');
+
+      if (isConvertedFolder) {
+        // If user right-clicked a converted folder/file (e.g. test1_MOV or STRM_E1_0370.mov),
+        // the source EXR folder is the cleanBase sibling, and target is cleanSrc!
+        const exrSourceDir = parentDir ? `${parentDir}/${cleanBase}` : cleanBase;
+        setSourceDir(exrSourceDir);
+        setTargetDir(cleanSrc);
+        runComparison(exrSourceDir, cleanSrc, defaultExpectedStart);
+        return;
+      }
+
       const siblingJpeg = parentDir ? `${parentDir}/${cleanBase}_JPEG` : `${cleanBase}_JPEG`;
       const siblingMov = parentDir ? `${parentDir}/${cleanBase}_MOV` : `${cleanBase}_MOV`;
       const jpegSub = `${cleanSrc}/JPEG`;

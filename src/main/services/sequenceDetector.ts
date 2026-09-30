@@ -120,9 +120,10 @@ export class SequenceDetector {
       }
     } catch (e) {}
 
-    logger.info(`Scanning input for EXR sequences: ${inputs.length > 1 ? `${inputs.length} paths` : primaryFolderPath}`);
+    logger.info(`Scanning input for sequences: ${inputs.length > 1 ? `${inputs.length} paths` : primaryFolderPath}`);
 
     const exrFiles: { fullPath: string; dir: string; fileName: string }[] = [];
+    const videoFiles: { fullPath: string; dir: string; fileName: string; ext: string }[] = [];
     const visitedFiles = new Set<string>();
 
     const walk = async (currentDir: string, depth: number = 0) => {
@@ -140,13 +141,7 @@ export class SequenceDetector {
           if (
             !entry.name.startsWith('.') &&
             entry.name !== 'node_modules' &&
-            entry.name !== '$RECYCLE.BIN' &&
-            entry.name !== 'JPEG' &&
-            entry.name !== 'MOV' &&
-            entry.name !== 'MP4' &&
-            !entry.name.endsWith('_JPEG') &&
-            !entry.name.endsWith('_MOV') &&
-            !entry.name.endsWith('_MP4')
+            entry.name !== '$RECYCLE.BIN'
           ) {
             await walk(fullPath, depth + 1);
           }
@@ -159,6 +154,16 @@ export class SequenceDetector {
                 fullPath,
                 dir: currentDir,
                 fileName: entry.name,
+              });
+            }
+          } else if (ext === '.mov' || ext === '.mp4') {
+            if (!visitedFiles.has(fullPath)) {
+              visitedFiles.add(fullPath);
+              videoFiles.push({
+                fullPath,
+                dir: currentDir,
+                fileName: entry.name,
+                ext,
               });
             }
           }
@@ -191,6 +196,16 @@ export class SequenceDetector {
               logger.info(`Single EXR file specified (${path.basename(itemPath)}). Scanning full directory: ${parentDir}`);
               await walk(parentDir, 0);
             }
+          } else if (ext === '.mov' || ext === '.mp4') {
+            if (!visitedFiles.has(itemPath)) {
+              visitedFiles.add(itemPath);
+              videoFiles.push({
+                fullPath: itemPath,
+                dir: path.dirname(itemPath),
+                fileName: path.basename(itemPath),
+                ext,
+              });
+            }
           }
         }
       } catch (err) {
@@ -199,7 +214,122 @@ export class SequenceDetector {
     }
 
     if (exrFiles.length === 0) {
-      logger.warn(`No EXR files found in ${primaryFolderPath}`);
+      if (videoFiles.length > 0) {
+        logger.info(`Found ${videoFiles.length} video files (.mov/.mp4) in ${primaryFolderPath}. Creating video sequence definitions...`);
+        const sequences: ExrSequence[] = [];
+
+        for (const video of videoFiles) {
+          let width = 1920;
+          let height = 1080;
+          let frameCount = 1;
+          let fps = 24;
+
+          try {
+            const { stdout } = await execAsync(
+              `"${ffprobePath}" -v error -select_streams v:0 -show_entries stream=width,height,nb_frames,r_frame_rate,duration -show_entries format=duration -of json "${video.fullPath}"`
+            );
+            const data = JSON.parse(stdout);
+            const stream = data.streams?.[0];
+            if (stream) {
+              width = stream.width || width;
+              height = stream.height || height;
+              if (stream.r_frame_rate) {
+                const parts = stream.r_frame_rate.split('/');
+                const num = parseFloat(parts[0]);
+                const den = parseFloat(parts[1] || '1');
+                if (num && den) fps = Math.round((num / den) * 100) / 100;
+              }
+              if (stream.nb_frames) {
+                frameCount = parseInt(stream.nb_frames, 10);
+              } else if (stream.duration || data.format?.duration) {
+                const dur = parseFloat(stream.duration || data.format.duration);
+                if (!isNaN(dur)) frameCount = Math.max(1, Math.round(dur * (fps || 24)));
+              }
+            }
+          } catch (err) {
+            logger.warn(`Could not probe video ${video.fullPath}:`, String(err));
+          }
+
+          // Check if there is a sibling EXR folder to match the original sequence's starting frame
+          const baseName = path.parse(video.fileName).name; // e.g. "STRM_E1_0370"
+          let firstFrame = 1001; // Standard VFX default
+          const candidates = [
+            path.join(path.dirname(video.dir), path.basename(video.dir).replace(/_(MOV|JPEG|MP4)$/i, '')),
+            path.dirname(video.dir),
+          ];
+          for (const cand of candidates) {
+            if (fs.existsSync(cand) && cand !== video.dir) {
+              try {
+                const files = await fs.promises.readdir(cand);
+                const exr = files.find((f) => f.toLowerCase().endsWith('.exr') && f.startsWith(baseName));
+                if (exr) {
+                  const m = exr.match(/(\d+)\.[eE][xX][rR]$/);
+                  if (m) {
+                    firstFrame = parseInt(m[1], 10);
+                    break;
+                  }
+                }
+              } catch (e) {}
+            }
+          }
+
+          const lastFrame = firstFrame + frameCount - 1;
+          const seqId = `${baseName}_video_${firstFrame}_${lastFrame}_${Date.now().toString(36)}`;
+          const pattern = `${baseName}.%04d.jpg`;
+          const globPattern = `${baseName}.*.jpg`;
+
+          // Generate frame detail stubs for UI listing
+          const frameDetails = [];
+          for (let f = firstFrame; f <= lastFrame; f++) {
+            const padded = String(f).padStart(4, '0');
+            frameDetails.push({
+              frameNumber: f,
+              fileName: `${baseName}.${padded}.jpg`,
+              filePath: video.fullPath,
+              fileSizeBytes: 0,
+              formattedSize: 'Video frame',
+            });
+          }
+
+          const videoSeq: ExrSequence = {
+            id: seqId,
+            folderPath: video.dir,
+            sequenceName: baseName,
+            pattern,
+            globPattern,
+            firstFrame,
+            lastFrame,
+            frameCount,
+            padding: 4,
+            delimiter: '.',
+            prefix: `${baseName}.`,
+            extension: video.ext,
+            width,
+            height,
+            hasMissingFrames: false,
+            missingFrames: [],
+            firstFramePath: video.fullPath,
+            frames: [video.fullPath],
+            frameDetails,
+            expectedStartFrame: firstFrame,
+            expectedEndFrame: lastFrame,
+            expectedCount: frameCount,
+          };
+
+          sequences.push(videoSeq);
+          logger.info(
+            `Video sequence detected: ${baseName} (${video.ext.toUpperCase()}) | Frames: ${firstFrame} → ${lastFrame} (${frameCount} frames) | Resolution: ${width}x${height}`
+          );
+        }
+
+        return {
+          sequences,
+          totalExrFiles: videoFiles.length,
+          folderPath: primaryFolderPath,
+        };
+      }
+
+      logger.warn(`No EXR or video files found in ${primaryFolderPath}`);
       return {
         sequences: [],
         totalExrFiles: 0,
@@ -472,7 +602,31 @@ export class SequenceDetector {
     customStart?: number,
     customEnd?: number
   ): Promise<FolderComparisonResult> {
-    const sourceScan = await this.scanDirectory(sourceDir, 'ffprobe', false);
+    let effectiveSource = sourceDir;
+    let effectiveTarget = targetDir;
+
+    try {
+      if (fs.existsSync(effectiveSource) && fs.statSync(effectiveSource).isFile()) {
+        effectiveSource = path.dirname(effectiveSource);
+      }
+      if (fs.existsSync(effectiveTarget) && fs.statSync(effectiveTarget).isFile()) {
+        effectiveTarget = path.dirname(effectiveTarget);
+      }
+    } catch (e) {}
+
+    // If source folder is named e.g. test1_MOV, resolve original EXR folder test1
+    const cleanSrcBase = path.basename(effectiveSource);
+    if (/_(MOV|JPEG|MP4)$/i.test(cleanSrcBase)) {
+      const candidateExr = path.join(path.dirname(effectiveSource), cleanSrcBase.replace(/_(MOV|JPEG|MP4)$/i, ''));
+      if (fs.existsSync(candidateExr)) {
+        if (!effectiveTarget || effectiveTarget === candidateExr) {
+          effectiveTarget = effectiveSource;
+          effectiveSource = candidateExr;
+        }
+      }
+    }
+
+    const sourceScan = await this.scanDirectory(effectiveSource, 'ffprobe', false);
     const seq = sourceScan.sequences[0];
 
     const sourceFrames = new Set<number>();
@@ -491,8 +645,8 @@ export class SequenceDetector {
 
     if (sourceFrames.size === 0) {
       try {
-        if (fs.existsSync(sourceDir)) {
-          const directFiles = await fs.promises.readdir(sourceDir);
+        if (fs.existsSync(effectiveSource)) {
+          const directFiles = await fs.promises.readdir(effectiveSource);
           for (const f of directFiles) {
             if (f.toLowerCase().endsWith('.exr')) {
               const m = f.match(/(\d+)\.[eE][xX][rR]$/);
@@ -506,8 +660,13 @@ export class SequenceDetector {
     // Read target directory files
     let targetEntries: string[] = [];
     try {
-      if (fs.existsSync(targetDir)) {
-        targetEntries = await fs.promises.readdir(targetDir);
+      if (fs.existsSync(effectiveTarget)) {
+        const stats = await fs.promises.stat(effectiveTarget);
+        if (stats.isFile()) {
+          targetEntries = [path.basename(effectiveTarget)];
+        } else {
+          targetEntries = await fs.promises.readdir(effectiveTarget);
+        }
       }
     } catch (e) {}
 

@@ -40,35 +40,29 @@ export class ConversionManager {
 
     // Check if targetFolder is empty, points to sequence folder, or is inside sequence folder
     const seqFolderClean = path.resolve(sequence.folderPath);
-    const resolvedTarget = targetFolder ? path.resolve(targetFolder) : '';
+    let resolvedTarget = targetFolder ? path.resolve(targetFolder) : '';
 
-    if (!resolvedTarget || resolvedTarget === seqFolderClean || resolvedTarget.startsWith(seqFolderClean + path.sep)) {
+    const isInsideSubfolder =
+      resolvedTarget === path.join(seqFolderClean, 'JPEG') ||
+      resolvedTarget === path.join(seqFolderClean, 'MOV') ||
+      resolvedTarget === path.join(seqFolderClean, 'MP4');
+
+    if (!resolvedTarget || resolvedTarget === seqFolderClean || isInsideSubfolder) {
       // Sibling folder outside sequence.folderPath so test1 is never polluted with output files/folders
       const parentDir = path.dirname(seqFolderClean);
       const folderName = path.basename(seqFolderClean).replace(/_(JPEG|MOV|MP4)$/i, '');
       const tag = settings.outputFormat === 'jpg' || (settings.outputFormat as string) === 'jpeg' ? '_JPEG' : settings.outputFormat === 'mov' ? '_MOV' : `_${settings.outputFormat.toUpperCase()}`;
-      targetFolder = path.join(parentDir, `${folderName}${tag}`);
+      if (parentDir === '/' || parentDir === path.parse(seqFolderClean).root) {
+        targetFolder = path.join(seqFolderClean, tag.replace(/^_/, ''));
+      } else {
+        targetFolder = path.join(parentDir, `${folderName}${tag}`);
+      }
     } else {
       try {
         if (fs.existsSync(targetFolder) && fs.statSync(targetFolder).isFile()) {
           targetFolder = path.dirname(targetFolder);
         }
       } catch (e) {}
-
-      // If user chose a custom output folder, check if subfolder is desired
-      if (settings.createSubfolder !== false) {
-        if (settings.outputFormat === 'jpg' || (settings.outputFormat as string) === 'jpeg') {
-          const sub = 'JPEG';
-          if (!targetFolder.endsWith(path.sep + sub) && !targetFolder.toLowerCase().endsWith('_jpeg')) {
-            targetFolder = path.join(targetFolder, sub);
-          }
-        } else if (settings.outputFormat === 'mov') {
-          const sub = 'MOV';
-          if (!targetFolder.endsWith(path.sep + sub) && !targetFolder.toLowerCase().endsWith('_mov')) {
-            targetFolder = path.join(targetFolder, sub);
-          }
-        }
-      }
     }
 
     // Ensure output folder exists

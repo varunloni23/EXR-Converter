@@ -174,13 +174,26 @@ export class FFmpegService {
       const targetBitrate = settings.bitrateMbps || (isMov ? 40 : 12);
       const isCbr = settings.bitrateMode === 'cbr' || isMov;
 
-      // If converting an EXR sequence to JPEG, route through the master video pipeline
-      // to guarantee 100% color, contrast, and aspect-ratio parity with MOV!
-      if (isJpg && seq.frameCount > 1) {
-        return this.convertSequenceToJpegViaMaster(job, onProgress).then(resolve).catch(reject);
+      const isVideoInput =
+        seq.extension === '.mov' ||
+        seq.extension === '.mp4' ||
+        seq.extension === 'mov' ||
+        seq.extension === 'mp4' ||
+        path.extname(seq.firstFramePath).toLowerCase() === '.mov' ||
+        path.extname(seq.firstFramePath).toLowerCase() === '.mp4';
+
+      // If input is video and target is JPEG, extract high-fidelity JPEGs directly!
+      if (isVideoInput && isJpg) {
+        return this.convertVideoToJpegSequence(job, onProgress).then(resolve).catch(reject);
       }
 
-      if (isJpg || seq.frameCount === 1 || seq.frames.length === 1) {
+      if (isVideoInput) {
+        inputArgs = ['-i', seq.firstFramePath];
+      } else if (isJpg && seq.frameCount > 1) {
+        // If converting an EXR sequence to JPEG, route through the master video pipeline
+        // to guarantee 100% color, contrast, and aspect-ratio parity with MOV!
+        return this.convertSequenceToJpegViaMaster(job, onProgress).then(resolve).catch(reject);
+      } else if (isJpg || seq.frameCount === 1 || seq.frames.length === 1) {
         // Converting single frame or image to JPEG
         const singleFilePath = seq.firstFramePath || seq.frames[0];
         if (isJpg) {
@@ -287,6 +300,8 @@ export class FFmpegService {
           codecArgs = [
             '-c:v',
             'h264_videotoolbox',
+            '-allow_sw',
+            '1',
             '-b:v',
             `${targetBitrate}M`,
             '-maxrate',
@@ -817,6 +832,100 @@ export class FFmpegService {
 
   public isProcessPaused(jobId: string): boolean {
     return this.activeProcesses.get(jobId)?.isPaused || false;
+  }
+  /**
+   * Directly extracts high-fidelity JPEG frames from a video file (.mov / .mp4).
+   * Maps frame numbering to VFX convention (e.g. 1001..1003) and runs at lightning speed.
+   */
+  public async convertVideoToJpegSequence(
+    job: ConversionJob,
+    onProgress?: (data: ProgressData) => void
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const ffmpegBin = this.getFfmpegPath();
+      const seq = job.sequence;
+      const settings = job.settings;
+      const outputDir = path.dirname(job.outputPath);
+
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+
+      const totalFrames = Math.max(1, seq.frameCount);
+      const startTime = Date.now();
+      const qv = this.mapPhotoshopQualityToFfmpegQ(settings.jpegQuality || 8);
+      const formatOpt = settings.jpegFormatOption || 'baseline';
+      const outPatternName = `${seq.sequenceName}.%04d.jpg`;
+      const outputPattern = path.join(outputDir, outPatternName);
+
+      const extractArgs = [
+        '-hide_banner',
+        '-i',
+        seq.firstFramePath,
+        '-pix_fmt',
+        'yuvj420p',
+        '-q:v',
+        String(qv),
+        ...(formatOpt === 'baseline_optimized' ? ['-huffman', '1'] : []),
+        '-start_number',
+        String(seq.firstFrame || 1001),
+        '-y',
+        outputPattern,
+        '-progress',
+        'pipe:1',
+      ];
+
+      logger.info(
+        `Directly extracting high-fidelity JPEGs from video ${seq.firstFramePath} for job ${job.id}`,
+        `Command: ${ffmpegBin} ${extractArgs.join(' ')}`
+      );
+
+      const child = spawn(ffmpegBin, extractArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      this.activeProcesses.set(job.id, { process: child, isPaused: false, outputPath: job.outputPath });
+
+      child.stdout.on('data', (data: Buffer) => {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+          const [k, val] = line.split('=');
+          if (!k || val === undefined) continue;
+          if (k.trim() === 'frame') {
+            const f = parseInt(val.trim(), 10) || 0;
+            const pct = Math.min(100, Math.round((f / totalFrames) * 100));
+            if (onProgress) {
+              onProgress({
+                jobId: job.id,
+                frame: f,
+                totalFrames,
+                currentFrameNumber: (seq.firstFrame || 1001) + Math.min(f, totalFrames - 1),
+                percentage: pct,
+                fps: 60,
+                speedMultiplier: 2.0,
+                etaSeconds: 0,
+                elapsedSeconds: Math.round((Date.now() - startTime) / 1000),
+                fileSizeBytes: 0,
+              });
+            }
+          }
+        }
+      });
+
+      child.on('error', (err) => {
+        this.activeProcesses.delete(job.id);
+        reject(new Error(`Failed to extract JPEGs from video: ${err.message}`));
+      });
+
+      child.on('close', (code, sig) => {
+        this.activeProcesses.delete(job.id);
+        if (sig === 'SIGTERM' || sig === 'SIGKILL') {
+          return reject(new Error('Conversion was cancelled by user.'));
+        }
+        if (code !== 0) {
+          return reject(new Error(`JPEG extraction failed with exit code ${code}`));
+        }
+        logger.info(`Successfully extracted JPEGs from video to ${outputDir}`);
+        resolve(outputPattern);
+      });
+    });
   }
 }
 
