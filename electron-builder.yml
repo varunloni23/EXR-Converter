@@ -1,0 +1,54 @@
+appId: com.exrconverter.app
+productName: EXR Converter
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist-electron/**/*
+  - dist/**/*
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
+  category: public.app-category.video
+  extraResources:
+    - from: 'bin/mac'
+      to: 'bin'
+      filter:
+        - '**/*'
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: '${productName}-Setup-${version}.${ext}'
+  extraResources:
+    - from: 'bin/win'
+      to: 'bin'
+      filter:
+        - '**/*'
+fileAssociations:
+  - ext: 'exr'
+    name: 'OpenEXR Image'
+    description: 'OpenEXR Image Sequence File'
+    role: 'Viewer'
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 'EXR Converter'
+  include: 'build/installer.nsh'
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  category: AudioVideo

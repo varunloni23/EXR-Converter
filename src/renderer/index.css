@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #0b0d10;
+  color: #f5f7fa;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Studio Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0b0d10;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #252b33;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a424e;
+}
+
+/* Studio Glass & Surface Utilities */
+.studio-card {
+  background-color: #12161b;
+  border: 1px solid #252b33;
+  border-radius: 8px;
+}
+
+.studio-card-interactive {
+  background-color: #12161b;
+  border: 1px solid #252b33;
+  border-radius: 8px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.studio-card-interactive:hover {
+  background-color: #161c23;
+  border-color: #384250;
+}
+
+.studio-button-primary {
+  background: linear-gradient(135deg, #7c5cff 0%, #6846f5 100%);
+  color: #ffffff;
+  font-weight: 500;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px 0 rgba(124, 92, 255, 0.3);
+}
+
+.studio-button-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #8b6dff 0%, #7655ff 100%);
+  box-shadow: 0 6px 20px 0 rgba(124, 92, 255, 0.45);
+  transform: translateY(-1px);
+}
+
+.studio-button-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.studio-button-secondary {
+  background-color: #1a2027;
+  border: 1px solid #2d3440;
+  color: #f5f7fa;
+  font-weight: 500;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.studio-button-secondary:hover:not(:disabled) {
+  background-color: #242c37;
+  border-color: #3e4857;
+  color: #ffffff;
+}
+
+/* Animated Progress Glow */
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow: 0 0 16px 2px rgba(124, 92, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 28px 6px rgba(124, 92, 255, 0.7);
+  }
+}
+
+.animate-glow {
+  animation: glowPulse 2s infinite ease-in-out;
+}

@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+dist-electron/
+release/
+
+# FFmpeg binary caches (>100MB - downloaded via npm run fetch-binaries)
+bin/win/
+bin/mac/
+bin/*.zip
+bin/win-temp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment & logs
+*.log
+.env
+.env.local
+.env.*.local
+
+# Test outputs
+*_JPEG/
+*_MOV/
+*_MP4/
+JPEG/
+MOV/
