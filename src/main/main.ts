@@ -51,14 +51,21 @@ function parseLaunchArgs(argv: string[]): LaunchTarget | null {
   let mode: 'sequence' | 'individual' | undefined;
   const isCompare = argv.includes('--compare') || argv.includes('-c');
 
-  for (let i = 1; i < argv.length; i++) {
+  for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--format' && i + 1 < argv.length) {
+    if ((arg === '--format' || arg === '-f') && i + 1 < argv.length) {
       const f = argv[i + 1].toLowerCase();
       if (f === 'mov' || f === 'jpg' || f === 'jpeg' || f === 'mp4') {
         format = (f === 'jpeg' ? 'jpg' : f) as 'mov' | 'jpg' | 'mp4';
       }
       i++;
+      continue;
+    }
+    if (arg.startsWith('--format=')) {
+      const f = arg.split('=')[1]?.toLowerCase();
+      if (f === 'mov' || f === 'jpg' || f === 'jpeg' || f === 'mp4') {
+        format = (f === 'jpeg' ? 'jpg' : f) as 'mov' | 'jpg' | 'mp4';
+      }
       continue;
     }
     if (arg === '--mode' && i + 1 < argv.length) {
@@ -69,8 +76,15 @@ function parseLaunchArgs(argv: string[]): LaunchTarget | null {
       i++;
       continue;
     }
+    if (arg.startsWith('--mode=')) {
+      const m = arg.split('=')[1]?.toLowerCase();
+      if (m === 'sequence' || m === 'individual') {
+        mode = m as any;
+      }
+      continue;
+    }
     if (!arg || arg.startsWith('-')) continue;
-    if (arg === '.' || arg === 'electron' || arg.endsWith('.js') || arg.endsWith('.ts')) continue;
+    if (arg === '.' || arg === 'electron' || arg.endsWith('.js') || arg.endsWith('.ts') || arg.endsWith('EXR Converter') || arg.endsWith('EXR Converter.exe')) continue;
     try {
       if (fs.existsSync(arg)) {
         paths.push(path.resolve(arg));
@@ -119,14 +133,15 @@ function dispatchOpenPath(target: LaunchTarget) {
   }
 }
 
-const gotTheLock = app.requestSingleInstanceLock();
+const gotTheLock = app.requestSingleInstanceLock({ argv: process.argv });
 if (!gotTheLock) {
   app.quit();
 } else {
-  app.on('second-instance', (_, commandLine) => {
-    const isBg = commandLine.includes('--background');
-    const isCompare = commandLine.includes('--compare') || commandLine.includes('-c');
-    const parsed = parseLaunchArgs(commandLine);
+  app.on('second-instance', (_, commandLine, __, additionalData: any) => {
+    const rawArgs = (additionalData && Array.isArray(additionalData.argv)) ? additionalData.argv : commandLine;
+    const isBg = rawArgs.includes('--background');
+    const isCompare = rawArgs.includes('--compare') || rawArgs.includes('-c');
+    const parsed = parseLaunchArgs(rawArgs);
     if (parsed) {
       if (isCompare) {
         parsed.openComparison = true;
@@ -137,7 +152,7 @@ if (!gotTheLock) {
           mainWindow.focus();
         }
       }
-      logger.info(`Received context-menu launch from second instance: ${parsed.path} (format=${parsed.format || 'default'}, compare=${Boolean(parsed.openComparison)})`);
+      logger.info(`Received context-menu launch from second instance: ${parsed.path} (format=${parsed.format || 'default'}, mode=${parsed.mode || 'default'}, compare=${Boolean(parsed.openComparison)})`);
       dispatchOpenPath(parsed);
     } else if (mainWindow && !isBg) {
       if (mainWindow.isMinimized()) mainWindow.restore();

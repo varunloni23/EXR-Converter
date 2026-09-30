@@ -280,37 +280,46 @@ fi`;
   console.log(`✅ Finder Quick Action installed: ${menuItemName} (${workflowPath})`);
 }
 
-// Remove old legacy MP4 Quick Action if present
-const oldMp4Workflow = path.join(servicesDir, 'Convert to MP4 with EXR Converter.workflow');
-if (fs.existsSync(oldMp4Workflow)) {
-  try {
-    fs.rmSync(oldMp4Workflow, { recursive: true, force: true });
-    console.log('🗑️ Removed legacy MP4 Quick Action from Services');
-  } catch (e) {
-    console.warn('Could not remove old MP4 workflow:', e);
+// Remove old legacy workflows if present
+const legacyWorkflows = [
+  'Convert to MP4 with EXR Converter.workflow',
+  'Convert to MOV (Single Video, 40Mbps).workflow',
+  'Convert to JPEG with EXR Converter.workflow',
+  'Compare Folders with EXR Converter.workflow',
+];
+
+for (const legacy of legacyWorkflows) {
+  const p = path.join(servicesDir, legacy);
+  if (fs.existsSync(p)) {
+    try {
+      fs.rmSync(p, { recursive: true, force: true });
+      console.log(`🗑️ Removed legacy workflow: ${legacy}`);
+    } catch (e) {
+      console.warn(`Could not remove ${legacy}:`, e);
+    }
   }
 }
 
 // 1. Install MOV (Single Merged Video, 40Mbps CBR)
 createQuickAction({
-  workflowName: 'Convert to MOV (Single Video, 40Mbps).workflow',
-  menuItemName: 'Convert to MOV (Single Video, 40Mbps)',
+  workflowName: 'Convert to MOV.workflow',
+  menuItemName: 'Convert to MOV',
   format: 'mov',
   mode: 'sequence',
 });
 
 // 2. Install JPEG (Quality 8 Maximum, Baseline/Progressive)
 createQuickAction({
-  workflowName: 'Convert to JPEG with EXR Converter.workflow',
-  menuItemName: 'Convert to JPEG with EXR Converter',
+  workflowName: 'Convert to JPEG.workflow',
+  menuItemName: 'Convert to JPEG',
   format: 'jpg',
   mode: 'individual',
 });
 
 // 3. Install Compare Folders Quick Action
 createQuickAction({
-  workflowName: 'Compare Folders with EXR Converter.workflow',
-  menuItemName: 'Compare Folders with EXR Converter',
+  workflowName: 'Compare Folders.workflow',
+  menuItemName: 'Compare Folders',
   isCompare: true,
 });
 

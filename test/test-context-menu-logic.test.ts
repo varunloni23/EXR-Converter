@@ -21,22 +21,19 @@ async function runTest() {
     throw new Error('Expected full sequence with multiple frames for folder right-click');
   }
 
-  // 2. Test Right-Click on Single EXR File (Converts ONLY that 1 file)
-  console.log('\n2. Simulating right-click on single EXR file with singleFileOnly = true...');
+  // 2. Test Right-Click on Single EXR File (Scans folder and detects full sequence)
+  console.log('\n2. Simulating right-click on single EXR file (singleFileOnly = false)...');
   const singleResult = await sequenceDetector.scanDirectory(
     sampleFile,
     ffmpegService.getFfprobePath(),
     true,
-    true
+    false
   );
   console.log(`   ✓ Found ${singleResult.sequences.length} sequence(s)`);
   console.log(`   ✓ Total frames detected: ${singleResult.sequences[0]?.frameCount}`);
-  console.log(`   ✓ Target file: ${singleResult.sequences[0]?.firstFramePath}`);
-  if (singleResult.sequences[0]?.frameCount !== 1) {
-    throw new Error(`Expected exactly 1 frame for single file right-click, got ${singleResult.sequences[0]?.frameCount}`);
-  }
-  if (singleResult.sequences[0]?.firstFramePath !== sampleFile) {
-    throw new Error(`Target path mismatch: expected ${sampleFile}, got ${singleResult.sequences[0]?.firstFramePath}`);
+  console.log(`   ✓ First frame: ${singleResult.sequences[0]?.firstFramePath}`);
+  if (singleResult.sequences[0]?.frameCount < 2) {
+    throw new Error(`Expected full sequence with multiple frames for single file right-click, got ${singleResult.sequences[0]?.frameCount}`);
   }
 
   console.log('\n🎉 ALL CONTEXT MENU LOGIC TESTS PASSED!\n');

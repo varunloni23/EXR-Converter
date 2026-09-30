@@ -315,7 +315,7 @@ export default function App() {
       for (const folder of targetPaths) {
         const isExr = folder.toLowerCase().endsWith('.exr');
         try {
-          const scanRes = await window.electronAPI.scanFolder(folder, isExr);
+          const scanRes = await window.electronAPI.scanFolder(folder, false);
           if (!scanRes || scanRes.sequences.length === 0) continue;
 
           for (const seq of scanRes.sequences) {
@@ -380,9 +380,9 @@ export default function App() {
       return;
     }
 
-    // Single folder or single EXR file target
+    // Single folder or single EXR file target: scan folder to detect full sequence
     const isExrFile = targetPath.toLowerCase().endsWith('.exr');
-    const scanned = await handleScanFolder(targetPath, isExrFile, activeSettings.outputFormat);
+    const scanned = await handleScanFolder(targetPath, false, activeSettings.outputFormat);
 
     if (shouldAutoStart && scanned && scanned.firstSeq) {
       const seq = scanned.firstSeq;
