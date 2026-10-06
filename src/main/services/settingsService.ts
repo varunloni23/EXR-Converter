@@ -25,8 +25,8 @@ export const DEFAULT_SETTINGS: ConversionSettings = {
   jpegQuality: 8, // Quality: 8 Maximum (Photoshop 1-12 scale)
   jpegFormatOption: 'baseline',
   jpegScans: 3,
-  expectedStartFrame: 1001, // Standard VFX Start Frame (01001)
-  createSubfolder: true, // Automatically create new dedicated folder (e.g. /JPEG or /MOV)
+  expectedStartFrame: 1, // Follow actual frame sequence directly
+  createSubfolder: true, // Automatically create dedicated folder for sequences
 };
 
 export class SettingsService {

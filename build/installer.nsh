@@ -1,3 +1,12 @@
+!macro customInit
+  ; Terminate any running instance of EXR Converter so setup never blocks with 'cannot be closed'
+  nsExec::Exec 'taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T'
+!macroend
+
+!macro customUnInstallCheck
+  nsExec::Exec 'taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T'
+!macroend
+
 !macro customInstall
   DetailPrint "Registering EXR Converter Windows Explorer Context Menus..."
   

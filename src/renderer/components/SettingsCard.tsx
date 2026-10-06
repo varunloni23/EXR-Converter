@@ -96,6 +96,7 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({
           onClick={() =>
             onUpdateSettings({
               outputFormat: 'jpg',
+              scalePercent: 100,
               jpegQuality: settings.jpegQuality || 8,
               jpegFormatOption: settings.jpegFormatOption || 'baseline',
               conversionMode: 'individual',

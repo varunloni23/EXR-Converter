@@ -15,6 +15,8 @@ export class UpdateService {
     this.window = win;
   }
 
+  private isManualCheck: boolean = false;
+
   private setupAutoUpdater() {
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
@@ -28,7 +30,9 @@ export class UpdateService {
     };
 
     autoUpdater.on('checking-for-update', () => {
-      this.sendStatus({ state: 'checking' });
+      if (this.isManualCheck) {
+        this.sendStatus({ state: 'checking' });
+      }
     });
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
@@ -43,18 +47,24 @@ export class UpdateService {
 
     autoUpdater.on('update-not-available', (info: UpdateInfo) => {
       logger.info(`App is up to date: version ${info.version}`);
-      this.sendStatus({
-        state: 'not-available',
-        version: info.version,
-      });
+      if (this.isManualCheck) {
+        this.sendStatus({
+          state: 'not-available',
+          version: info.version,
+        });
+      }
     });
 
     autoUpdater.on('error', (err: Error) => {
-      logger.warn(`Auto-updater error: ${err.message}`);
-      this.sendStatus({
-        state: 'error',
-        error: err.message,
-      });
+      logger.warn(`Auto-updater background check info: ${err.message}`);
+      if (this.isManualCheck) {
+        this.sendStatus({
+          state: 'error',
+          error: err.message,
+        });
+      } else {
+        this.sendStatus({ state: 'idle' });
+      }
     });
 
     autoUpdater.on('download-progress', (progress: ProgressInfo) => {
@@ -88,7 +98,9 @@ export class UpdateService {
     return this.currentStatus;
   }
 
-  public async checkForUpdates(): Promise<UpdateStatus> {
+  public async checkForUpdates(isManual: boolean = false): Promise<UpdateStatus> {
+    this.isManualCheck = isManual;
+
     if (!app.isPackaged && process.env.NODE_ENV !== 'production') {
       logger.info('AutoUpdater skipped in development environment.');
       const devStatus: UpdateStatus = {
@@ -96,19 +108,26 @@ export class UpdateService {
         version: app.getVersion(),
         error: 'Development mode: Updates are checked in packaged builds.',
       };
-      this.sendStatus(devStatus);
+      if (isManual) {
+        this.sendStatus(devStatus);
+      }
       return devStatus;
     }
 
     try {
-      this.sendStatus({ state: 'checking' });
+      if (isManual) {
+        this.sendStatus({ state: 'checking' });
+      }
       await autoUpdater.checkForUpdates();
       return this.currentStatus;
     } catch (err: any) {
-      logger.warn(`Failed to check for updates: ${err.message}`);
-      const errStatus: UpdateStatus = { state: 'error', error: err.message };
-      this.sendStatus(errStatus);
-      return errStatus;
+      logger.warn(`Update check: ${err.message}`);
+      if (isManual) {
+        const errStatus: UpdateStatus = { state: 'error', error: err.message };
+        this.sendStatus(errStatus);
+        return errStatus;
+      }
+      return { state: 'idle' };
     }
   }
 

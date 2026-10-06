@@ -27,7 +27,7 @@ export const FolderComparisonModal: React.FC<FolderComparisonModalProps> = ({
   onClose,
   defaultSourceDir,
   defaultTargetDir,
-  defaultExpectedStart = 1001,
+  defaultExpectedStart = 1,
 }) => {
   if (!isOpen) return null;
 

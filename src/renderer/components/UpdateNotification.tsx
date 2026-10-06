@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DownloadCloud, RefreshCw, CheckCircle2, AlertCircle, Sparkles, X, ArrowUpCircle } from 'lucide-react';
+import { DownloadCloud, CheckCircle2, Sparkles, X, ArrowUpCircle } from 'lucide-react';
 import { UpdateStatus } from '../../shared/types';
 
 interface UpdateNotificationProps {
@@ -29,7 +29,13 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = () => {
     return () => unsub();
   }, []);
 
-  if (!status || isDismissed || status.state === 'idle') {
+  if (
+    !status ||
+    isDismissed ||
+    status.state === 'idle' ||
+    status.state === 'checking' ||
+    status.state === 'error'
+  ) {
     return null;
   }
 
@@ -48,9 +54,6 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = () => {
       <div className="bg-studio-card/95 border border-studio-accent/40 rounded-xl p-4 shadow-2xl backdrop-blur-xl">
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-2.5">
-            {status.state === 'checking' && (
-              <RefreshCw className="w-5 h-5 text-studio-accent animate-spin" />
-            )}
             {status.state === 'available' && (
               <DownloadCloud className="w-5 h-5 text-studio-accent animate-bounce" />
             )}
@@ -63,26 +66,19 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = () => {
             {status.state === 'not-available' && (
               <CheckCircle2 className="w-5 h-5 text-emerald-400" />
             )}
-            {status.state === 'error' && (
-              <AlertCircle className="w-5 h-5 text-amber-400" />
-            )}
 
             <div>
               <h4 className="text-xs font-semibold text-white tracking-wide">
-                {status.state === 'checking' && 'Checking for Updates...'}
                 {status.state === 'available' && `New Update v${status.version || ''} Available`}
                 {status.state === 'downloading' && `Downloading Update v${status.version || ''}...`}
                 {status.state === 'downloaded' && `Update v${status.version || ''} Ready!`}
                 {status.state === 'not-available' && 'EXR Converter is Up to Date'}
-                {status.state === 'error' && 'Update Check Failed'}
               </h4>
               <p className="text-[11px] text-studio-textMuted mt-0.5">
-                {status.state === 'checking' && 'Checking GitHub for the latest release...'}
                 {status.state === 'available' && 'Starting background download...'}
                 {status.state === 'downloading' && `${status.progressPercent || 0}% downloaded`}
                 {status.state === 'downloaded' && 'Restart the app now to apply the update seamlessly.'}
                 {status.state === 'not-available' && 'You are running the newest version.'}
-                {status.state === 'error' && (status.error || 'Could not connect to GitHub.')}
               </p>
             </div>
           </div>

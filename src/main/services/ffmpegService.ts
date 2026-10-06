@@ -190,9 +190,8 @@ export class FFmpegService {
       if (isVideoInput) {
         inputArgs = ['-i', seq.firstFramePath];
       } else if (isJpg && seq.frameCount > 1) {
-        // If converting an EXR sequence to JPEG, route through the master video pipeline
-        // to guarantee 100% color, contrast, and aspect-ratio parity with MOV!
-        return this.convertSequenceToJpegViaMaster(job, onProgress).then(resolve).catch(reject);
+        // Direct high-performance EXR sequence to JPEG conversion (100% resolution & 1:1 filename parity)
+        return this.convertSequenceToJpegDirect(job, onProgress).then(resolve).catch(reject);
       } else if (isJpg || seq.frameCount === 1 || seq.frames.length === 1) {
         // Converting single frame or image to JPEG
         const singleFilePath = seq.firstFramePath || seq.frames[0];
@@ -261,8 +260,13 @@ export class FFmpegService {
         ];
       }
 
-      // Video scale filter: ensures dimensions are even
-      const scaleFilter = `scale=${job.targetWidth}:${job.targetHeight}:flags=lanczos`;
+      // Color transfer & scaling filter:
+      // Linear EXR inputs must be converted to sRGB gamma so output JPG/MOV is NOT dark
+      const colorFilter = !isVideoInput ? 'colorspace=all=bt709:trc=srgb:iall=bt709:itrc=linear' : '';
+      const needsScale = job.targetWidth !== seq.width || job.targetHeight !== seq.height;
+      const scalePart = needsScale ? `scale=${job.targetWidth}:${job.targetHeight}:flags=lanczos` : '';
+      const filterParts = [colorFilter, scalePart].filter(Boolean);
+      const effectiveVf = filterParts.length > 0 ? filterParts.join(',') : null;
 
       // Codec & Output args
       let outputArgs: string[] = [];
@@ -276,8 +280,7 @@ export class FFmpegService {
           jpegArgs.push('-huffman', '1');
         }
         outputArgs = [
-          '-vf',
-          scaleFilter,
+          ...(effectiveVf ? ['-vf', effectiveVf] : []),
           ...jpegArgs,
           '-frames:v',
           '1',
@@ -371,8 +374,7 @@ export class FFmpegService {
         }
 
         outputArgs = [
-          '-vf',
-          scaleFilter,
+          ...(effectiveVf ? ['-vf', effectiveVf] : []),
           ...codecArgs,
           ...(isMov ? ['-f', 'mov'] : []),
           '-movflags',
@@ -509,11 +511,11 @@ export class FFmpegService {
   }
 
   /**
-   * High-fidelity EXR sequence to JPEG converter.
-   * Renders the sequence through the high-bitrate (40Mbps CBR H.264) video pipeline
-   * and extracts the JPEGs, ensuring 100% color space, gamma, and framing parity with MOV.
+   * Direct high-fidelity EXR sequence to JPEG converter.
+   * Converts directly from EXR to JPEG with 100% original resolution and accurate linear->sRGB color transform.
+   * Guarantees 1:1 filename matching with source EXR files (no start 1001 assumption, no shifts).
    */
-  private async convertSequenceToJpegViaMaster(
+  private async convertSequenceToJpegDirect(
     job: ConversionJob,
     onProgress?: (data: ProgressData) => void
   ): Promise<string> {
@@ -529,137 +531,29 @@ export class FFmpegService {
 
       const totalFrames = seq.frameCount;
       const startTime = Date.now();
-      const tempMasterMov = path.join(outputDir, `.temp_master_${job.id}.mov`);
-      let tempConcatPath: string | null = null;
+      const qv = this.mapPhotoshopQualityToFfmpegQ(settings.jpegQuality || 8);
+      const formatOpt = settings.jpegFormatOption || 'baseline';
 
-      // 1. Prepare input args
-      let inputArgs: string[] = [];
-      if (seq.hasMissingFrames) {
-        const frameDuration = (1 / settings.fps).toFixed(8);
-        const concatLines: string[] = [];
-        for (const frameFile of seq.frames) {
-          const safePath = frameFile.replace(/\\/g, '/').replace(/'/g, "'\\''");
-          concatLines.push(`file '${safePath}'`);
-          concatLines.push(`duration ${frameDuration}`);
-        }
-        if (seq.frames.length > 0) {
-          const safeLastPath = seq.frames[seq.frames.length - 1].replace(/\\/g, '/').replace(/'/g, "'\\''");
-          concatLines.push(`file '${safeLastPath}'`);
-        }
-        tempConcatPath = path.join(os.tmpdir(), `exr_concat_${job.id}.txt`);
-        await fs.promises.writeFile(tempConcatPath, concatLines.join('\n'), 'utf8');
-        inputArgs = ['-f', 'concat', '-safe', '0', '-i', tempConcatPath];
-      } else {
-        const patternPath = path.join(seq.folderPath, seq.pattern);
-        inputArgs = [
+      const colorFilter = 'colorspace=all=bt709:trc=srgb:iall=bt709:itrc=linear';
+      const needsScale = job.targetWidth !== seq.width || job.targetHeight !== seq.height;
+      const scalePart = needsScale ? `scale=${job.targetWidth}:${job.targetHeight}:flags=lanczos` : '';
+      const filterParts = [colorFilter, scalePart].filter(Boolean);
+      const effectiveVf = filterParts.join(',');
+
+      // If sequence has no missing frames and has an image2 pattern, use single-pass image2
+      if (!seq.hasMissingFrames && seq.pattern) {
+        const outPatternName = seq.pattern.replace(/\.[eE][xX][rR]$/, '.jpg');
+        const outputPattern = path.join(outputDir, outPatternName);
+        const inputPattern = path.join(seq.folderPath, seq.pattern);
+
+        const args = [
+          '-hide_banner',
           '-f', 'image2',
           '-start_number', String(seq.firstFrame),
-          '-framerate', String(settings.fps),
-          '-i', patternPath,
-        ];
-      }
-
-      const scaleFilter = `scale=${job.targetWidth}:${job.targetHeight}:flags=lanczos`;
-      const targetBitrate = settings.bitrateMbps || 40;
-
-      // Master MOV encoding args: H.264 40Mbps CBR yuv420p
-      const masterMovArgs = [
-        '-hide_banner',
-        ...inputArgs,
-        '-vf', scaleFilter,
-        '-c:v', 'libx264',
-        '-preset', 'medium',
-        '-b:v', `${targetBitrate}M`,
-        '-minrate', `${targetBitrate}M`,
-        '-maxrate', `${targetBitrate}M`,
-        '-bufsize', `${targetBitrate * 2}M`,
-        '-pix_fmt', 'yuv420p',
-        '-f', 'mov',
-        '-y', tempMasterMov,
-        '-progress', 'pipe:1',
-      ];
-
-      logger.info(`Starting Master MOV encode for JPEG job ${job.id}`);
-
-      const cleanupTemps = () => {
-        if (tempConcatPath && fs.existsSync(tempConcatPath)) {
-          try { fs.unlinkSync(tempConcatPath); } catch (e) {}
-        }
-        if (tempMasterMov && fs.existsSync(tempMasterMov)) {
-          try { fs.unlinkSync(tempMasterMov); } catch (e) {}
-        }
-      };
-
-      const proc1 = spawn(ffmpegBin, masterMovArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-      this.activeProcesses.set(job.id, { process: proc1, isPaused: false, outputPath: tempMasterMov });
-
-      let currentFrame = 0;
-      let lastFps = 0;
-      let lastSpeed = 1.0;
-
-      proc1.stdout.on('data', (data: Buffer) => {
-        const lines = data.toString().split('\n');
-        for (const line of lines) {
-          const [k, val] = line.split('=');
-          if (!k || val === undefined) continue;
-          const key = k.trim();
-          const value = val.trim();
-          if (key === 'frame') currentFrame = parseInt(value, 10) || currentFrame;
-          else if (key === 'fps') { const p = parseFloat(value); if (!isNaN(p)) lastFps = p; }
-          else if (key === 'speed') { const p = parseFloat(value.replace('x', '')); if (!isNaN(p)) lastSpeed = p; }
-          else if (key === 'progress' && (value === 'continue' || value === 'end')) {
-            const elapsed = Math.max(0.1, (Date.now() - startTime) / 1000);
-            const percentage = Math.min(85, Math.round((currentFrame / totalFrames) * 85));
-            if (onProgress) {
-              onProgress({
-                jobId: job.id,
-                frame: currentFrame,
-                totalFrames,
-                currentFrameNumber: seq.firstFrame + Math.min(currentFrame, totalFrames - 1),
-                percentage,
-                fps: Math.round(lastFps * 10) / 10,
-                speedMultiplier: Math.round(lastSpeed * 100) / 100,
-                etaSeconds: Math.ceil(Math.max(0, totalFrames - currentFrame) / Math.max(1, lastFps)),
-                elapsedSeconds: Math.round(elapsed),
-                fileSizeBytes: 0,
-              });
-            }
-          }
-        }
-      });
-
-      proc1.on('error', (err) => {
-        cleanupTemps();
-        this.activeProcesses.delete(job.id);
-        reject(new Error(`Failed to encode intermediate master video: ${err.message}`));
-      });
-
-      proc1.on('close', async (code, signal) => {
-        if (tempConcatPath && fs.existsSync(tempConcatPath)) {
-          try { fs.unlinkSync(tempConcatPath); } catch (e) {}
-        }
-
-        if (signal === 'SIGTERM' || signal === 'SIGKILL') {
-          cleanupTemps();
-          this.activeProcesses.delete(job.id);
-          return reject(new Error('Conversion was cancelled by user.'));
-        }
-
-        if (code !== 0) {
-          cleanupTemps();
-          this.activeProcesses.delete(job.id);
-          return reject(new Error(`Master video encoding failed with exit code ${code}`));
-        }
-
-        // Phase 2: Extract JPEG sequence with matching color space
-        const qv = this.mapPhotoshopQualityToFfmpegQ(settings.jpegQuality || 8);
-        const formatOpt = settings.jpegFormatOption || 'baseline';
-        const outPatternName = seq.pattern.replace(/\.[^/.]+$/, '.jpg');
-        const outputPattern = path.join(outputDir, outPatternName);
-
-        const extractArgs = [
-          '-hide_banner',
-          '-i', tempMasterMov,
+          '-framerate', String(settings.fps || 24),
+          '-i', inputPattern,
+          '-vf', effectiveVf,
+          '-c:v', 'mjpeg',
           '-pix_fmt', 'yuvj420p',
           '-q:v', String(qv),
           ...(formatOpt === 'baseline_optimized' ? ['-huffman', '1'] : []),
@@ -668,18 +562,31 @@ export class FFmpegService {
           '-progress', 'pipe:1',
         ];
 
-        logger.info(`Extracting high-fidelity JPEGs for job ${job.id}`);
-        const proc2 = spawn(ffmpegBin, extractArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-        this.activeProcesses.set(job.id, { process: proc2, isPaused: false, outputPath: job.outputPath });
+        logger.info(
+          `Converting EXR sequence directly to JPEG for job ${job.id}`,
+          `Command: ${ffmpegBin} ${args.join(' ')}`
+        );
+        const proc = spawn(ffmpegBin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        this.activeProcesses.set(job.id, { process: proc, isPaused: false, outputPath: job.outputPath });
 
-        proc2.stdout.on('data', (data: Buffer) => {
+        let currentFrame = 0;
+        let lastFps = 30;
+        let lastSpeed = 1.0;
+        let stderrLog = '';
+
+        proc.stderr.on('data', (d: Buffer) => {
+          stderrLog += d.toString();
+        });
+
+        proc.stdout.on('data', (data: Buffer) => {
           const lines = data.toString().split('\n');
           for (const line of lines) {
             const [k, val] = line.split('=');
             if (!k || val === undefined) continue;
             if (k.trim() === 'frame') {
               const f = parseInt(val.trim(), 10) || 0;
-              const pct = 85 + Math.min(15, Math.round((f / totalFrames) * 15));
+              currentFrame = f;
+              const pct = Math.min(100, Math.round((f / totalFrames) * 100));
               if (onProgress) {
                 onProgress({
                   jobId: job.id,
@@ -689,64 +596,114 @@ export class FFmpegService {
                   percentage: pct,
                   fps: lastFps,
                   speedMultiplier: lastSpeed,
-                  etaSeconds: 0,
+                  etaSeconds: Math.ceil(Math.max(0, totalFrames - f) / Math.max(1, lastFps)),
                   elapsedSeconds: Math.round((Date.now() - startTime) / 1000),
                   fileSizeBytes: 0,
                 });
               }
+            } else if (k.trim() === 'fps') {
+              const p = parseFloat(val.trim());
+              if (!isNaN(p) && p > 0) lastFps = p;
+            } else if (k.trim() === 'speed') {
+              const p = parseFloat(val.trim().replace('x', ''));
+              if (!isNaN(p)) lastSpeed = p;
             }
           }
         });
 
-        proc2.on('error', (err) => {
-          cleanupTemps();
+        proc.on('error', (err) => {
           this.activeProcesses.delete(job.id);
-          reject(new Error(`Failed to extract JPEGs: ${err.message}`));
+          reject(new Error(`Failed to convert JPEG sequence: ${err.message}`));
         });
 
-        proc2.on('close', async (c2, sig2) => {
-          cleanupTemps();
+        proc.on('close', async (code, sig) => {
           this.activeProcesses.delete(job.id);
-
-          if (sig2 === 'SIGTERM' || sig2 === 'SIGKILL') {
+          if (sig === 'SIGTERM' || sig === 'SIGKILL') {
             return reject(new Error('Conversion was cancelled by user.'));
           }
-
-          if (c2 !== 0) {
-            return reject(new Error(`JPEG extraction failed with exit code ${c2}`));
+          if (code !== 0) {
+            logger.error(`JPEG conversion FFmpeg stderr: ${stderrLog}`);
+            return reject(new Error(`JPEG conversion failed with exit code ${code}: ${stderrLog}`));
           }
-
-          // If sequence had missing frames/gaps, ensure names align with source frames
-          if (seq.hasMissingFrames && seq.frames && seq.frames.length > 0) {
-            try {
-              const generatedFiles = (await fs.promises.readdir(outputDir))
-                .filter((f) => f.toLowerCase().endsWith('.jpg') || f.toLowerCase().endsWith('.jpeg'))
-                .sort();
-              if (generatedFiles.length === seq.frames.length) {
-                for (let i = 0; i < seq.frames.length; i++) {
-                  const expectedBase = path.basename(seq.frames[i]).replace(/\.[^/.]+$/, '.jpg');
-                  const currentFile = generatedFiles[i];
-                  if (currentFile !== expectedBase) {
-                    const oldP = path.join(outputDir, currentFile);
-                    const newP = path.join(outputDir, expectedBase);
-                    if (fs.existsSync(oldP) && !fs.existsSync(newP)) {
-                      await fs.promises.rename(oldP, newP);
-                    }
-                  }
-                }
-              }
-            } catch (renameErr) {
-              logger.warn(`Gap frame rename warning: ${renameErr}`);
-            }
-          }
-
-          logger.success(
-            `JPEG sequence conversion complete for job ${job.id}`,
-            `Saved to ${outputDir} (${totalFrames} frames with 100% MOV color parity)`
-          );
-          resolve(job.outputPath);
+          logger.success(`JPEG conversion complete for job ${job.id}`);
+          resolve(outputPattern);
         });
-      });
+        return;
+      }
+
+      // If sequence has missing frames or custom naming: convert each file directly to match EXR filename 1:1!
+      // "EXR filename will be JPG Filename too - donot look for start at 1001"
+      logger.info(`Converting ${seq.frames.length} EXR frames directly 1:1 to JPEG for job ${job.id}`);
+      let processed = 0;
+      const concurrency = Math.min(6, Math.max(2, os.cpus().length || 4));
+      const queue = [...seq.frames];
+      let hasError: Error | null = null;
+
+      const runWorker = async () => {
+        while (queue.length > 0 && !hasError) {
+          const framePath = queue.shift();
+          if (!framePath) break;
+
+          const baseName = path.basename(framePath).replace(/\.[eE][xX][rR]$/, '.jpg');
+          const destPath = path.join(outputDir, baseName);
+
+          const frameArgs = [
+            '-hide_banner',
+            '-y',
+            '-i', framePath,
+            '-vf', effectiveVf,
+            '-c:v', 'mjpeg',
+            '-pix_fmt', 'yuvj420p',
+            '-q:v', String(qv),
+            ...(formatOpt === 'baseline_optimized' ? ['-huffman', '1'] : []),
+            '-frames:v', '1',
+            destPath,
+          ];
+
+          await new Promise<void>((fResolve, fReject) => {
+            const p = spawn(ffmpegBin, frameArgs, { stdio: ['ignore', 'ignore', 'ignore'] });
+            this.activeProcesses.set(`${job.id}_frame_${processed}`, { process: p, isPaused: false, outputPath: destPath });
+            p.on('close', (c) => {
+              this.activeProcesses.delete(`${job.id}_frame_${processed}`);
+              if (c === 0) fResolve();
+              else fReject(new Error(`Frame conversion failed with code ${c}: ${framePath}`));
+            });
+            p.on('error', (err) => {
+              this.activeProcesses.delete(`${job.id}_frame_${processed}`);
+              fReject(err);
+            });
+          }).catch((err) => {
+            hasError = err;
+          });
+
+          processed++;
+          const pct = Math.min(100, Math.round((processed / totalFrames) * 100));
+          if (onProgress) {
+            onProgress({
+              jobId: job.id,
+              frame: processed,
+              totalFrames,
+              currentFrameNumber: processed,
+              percentage: pct,
+              fps: 24,
+              speedMultiplier: 1.0,
+              etaSeconds: 0,
+              elapsedSeconds: Math.round((Date.now() - startTime) / 1000),
+              fileSizeBytes: 0,
+            });
+          }
+        }
+      };
+
+      const workers = Array.from({ length: concurrency }, () => runWorker());
+      await Promise.all(workers);
+
+      if (hasError) {
+        return reject(hasError);
+      }
+
+      logger.success(`1:1 JPEG frames conversion complete for job ${job.id}`);
+      resolve(path.join(outputDir, `${seq.sequenceName}.jpg`));
     });
   }
 
@@ -868,7 +825,7 @@ export class FFmpegService {
         String(qv),
         ...(formatOpt === 'baseline_optimized' ? ['-huffman', '1'] : []),
         '-start_number',
-        String(seq.firstFrame || 1001),
+        String(seq.firstFrame || 1),
         '-y',
         outputPattern,
         '-progress',
@@ -896,7 +853,7 @@ export class FFmpegService {
                 jobId: job.id,
                 frame: f,
                 totalFrames,
-                currentFrameNumber: (seq.firstFrame || 1001) + Math.min(f, totalFrames - 1),
+                currentFrameNumber: (seq.firstFrame || 1) + Math.min(f, totalFrames - 1),
                 percentage: pct,
                 fps: 60,
                 speedMultiplier: 2.0,

@@ -252,7 +252,7 @@ export class SequenceDetector {
 
           // Check if there is a sibling EXR folder to match the original sequence's starting frame
           const baseName = path.parse(video.fileName).name; // e.g. "STRM_E1_0370"
-          let firstFrame = 1001; // Standard VFX default
+          let firstFrame = 1;
           const candidates = [
             path.join(path.dirname(video.dir), path.basename(video.dir).replace(/_(MOV|JPEG|MP4)$/i, '')),
             path.dirname(video.dir),
@@ -434,15 +434,8 @@ export class SequenceDetector {
         ? `${prefix}${delimiter}%0${padding}d.exr`
         : `${prefix}${delimiter}%d.exr`;
 
-      // Auto-detect conventional VFX start frame
-      let expectedStartFrame = firstFrame;
-      if (firstFrame >= 1001 && firstFrame <= 1050) {
-        expectedStartFrame = 1001;
-      } else if (firstFrame >= 1 && firstFrame <= 20) {
-        expectedStartFrame = 1;
-      } else if (firstFrame >= 10001 && firstFrame <= 10050) {
-        expectedStartFrame = 10001;
-      }
+      // Sequence start frame follows the actual EXR files directly (do not look for 1001)
+      const expectedStartFrame = firstFrame;
       const expectedEndFrame = lastFrame;
       const expectedCount = Math.max(0, expectedEndFrame - expectedStartFrame + 1);
 
@@ -687,7 +680,7 @@ export class SequenceDetector {
 
     // Expected range
     const sortedSource = Array.from(sourceFrames).sort((a, b) => a - b);
-    let start = customStart ?? (seq?.expectedStartFrame ?? (sortedSource[0] ?? 1001));
+    let start = customStart ?? (seq?.expectedStartFrame ?? (sortedSource[0] ?? 1));
     let end = customEnd ?? (seq?.expectedEndFrame ?? (sortedSource[sortedSource.length - 1] ?? (start + Math.max(1, sourceFrames.size) - 1)));
 
     const missingInTarget: number[] = [];

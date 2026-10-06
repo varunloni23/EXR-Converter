@@ -213,7 +213,7 @@ function createWindow(forceShow: boolean = false) {
     isRendererReady = true;
     if (app.isPackaged) {
       setTimeout(() => {
-        updateService.checkForUpdates().catch((err) => logger.warn(`Background update check error: ${err}`));
+        updateService.checkForUpdates(false).catch((err) => logger.warn(`Background update check error: ${err}`));
       }, 4000);
     }
   });
@@ -571,7 +571,7 @@ function registerIpcHandlers() {
 
   // 13. In-App Auto Updater
   ipcMain.handle('updater:check', async () => {
-    return updateService.checkForUpdates();
+    return updateService.checkForUpdates(true);
   });
 
   ipcMain.handle('updater:getStatus', async () => {

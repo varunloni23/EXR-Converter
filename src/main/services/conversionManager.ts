@@ -47,19 +47,31 @@ export class ConversionManager {
       resolvedTarget === path.join(seqFolderClean, 'MOV') ||
       resolvedTarget === path.join(seqFolderClean, 'MP4');
 
+    const isJpg = settings.outputFormat === 'jpg' || (settings.outputFormat as string) === 'jpeg';
+    const isMov = settings.outputFormat === 'mov';
+
     if (!resolvedTarget || resolvedTarget === seqFolderClean || isInsideSubfolder) {
-      // Sibling folder outside sequence.folderPath so test1 is never polluted with output files/folders
       const parentDir = path.dirname(seqFolderClean);
       const folderName = path.basename(seqFolderClean).replace(/_(JPEG|MOV|MP4)$/i, '');
-      const tag = settings.outputFormat === 'jpg' || (settings.outputFormat as string) === 'jpeg' ? '_JPEG' : settings.outputFormat === 'mov' ? '_MOV' : `_${settings.outputFormat.toUpperCase()}`;
-      if (parentDir === '/' || parentDir === path.parse(seqFolderClean).root) {
-        targetFolder = path.join(seqFolderClean, tag.replace(/^_/, ''));
+      if (isMov) {
+        // MOV is a single video file - save directly into parent folder (no _MOV subfolder!)
+        targetFolder = parentDir;
       } else {
-        targetFolder = path.join(parentDir, `${folderName}${tag}`);
+        // JPEG is an image sequence - save in dedicated _JPEG folder so loose frames don't clutter parent
+        const tag = isJpg ? '_JPEG' : `_${settings.outputFormat.toUpperCase()}`;
+        if (parentDir === '/' || parentDir === path.parse(seqFolderClean).root) {
+          targetFolder = path.join(seqFolderClean, tag.replace(/^_/, ''));
+        } else {
+          targetFolder = path.join(parentDir, `${folderName}${tag}`);
+        }
       }
     } else {
       try {
         if (fs.existsSync(targetFolder) && fs.statSync(targetFolder).isFile()) {
+          targetFolder = path.dirname(targetFolder);
+        }
+        // If MOV format, strip any trailing _MOV or /MOV from user target
+        if (isMov && (targetFolder.endsWith('_MOV') || targetFolder.endsWith(`${path.sep}MOV`))) {
           targetFolder = path.dirname(targetFolder);
         }
       } catch (e) {}
@@ -78,11 +90,13 @@ export class ConversionManager {
     const outputFileName = settings.outputFileName || `${sequence.sequenceName}.${settings.outputFormat}`;
     const outputPath = path.join(targetFolder, outputFileName);
 
-    const dims = ffmpegService.calculateDimensions(
-      sequence.width,
-      sequence.height,
-      settings.scalePercent
-    );
+    // For JPG, resolution must be 100% identical to source EXR by default
+    const effectiveScale = isJpg
+      ? (settings.scalePercent === 100 || !settings.scalePercent ? 100 : settings.scalePercent)
+      : (settings.scalePercent || 50);
+    const dims = isJpg && effectiveScale === 100
+      ? { targetWidth: sequence.width, targetHeight: sequence.height }
+      : ffmpegService.calculateDimensions(sequence.width, sequence.height, effectiveScale);
 
     const job: ConversionJob = {
       id: jobId,

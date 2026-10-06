@@ -60,7 +60,7 @@ export default function App() {
     conversionMode: 'sequence', // MOV always merges into 1 single video
     jpegQuality: 8,
     jpegFormatOption: 'baseline',
-    expectedStartFrame: 1001,
+    expectedStartFrame: 1,
     createSubfolder: true,
   });
 
@@ -173,13 +173,17 @@ export default function App() {
     }
   }, []);
 
-  // Helper to compute sibling output directory outside the source EXR folder (e.g. test1 -> test1_JPEG or test1_MOV)
+  // Helper to compute sibling output directory outside the source EXR folder (e.g. test1 -> test1_JPEG)
   const getSiblingOutputDir = (sourceDir: string, format: string) => {
     if (!sourceDir) return '';
     const clean = sourceDir.replace(/[/\\]+$/, '');
     const parent = clean.replace(/[/\\][^/\\]+$/, '');
     const base = clean.split(/[/\\]/).filter(Boolean).pop() || 'sequence';
-    const tag = format === 'jpg' || format === 'jpeg' ? '_JPEG' : format === 'mov' ? '_MOV' : `_${format.toUpperCase()}`;
+    if (format === 'mov') {
+      // MOV is a single video file - save directly in the parent directory (never create a _MOV subfolder!)
+      return parent || clean;
+    }
+    const tag = format === 'jpg' || format === 'jpeg' ? '_JPEG' : `_${format.toUpperCase()}`;
     if (base.toUpperCase().endsWith(tag)) {
       return clean;
     }
@@ -199,6 +203,13 @@ export default function App() {
         const newFileName = `${selectedSequence.sequenceName}.${fmt}`;
         setOutputFileName(newFileName);
         updated.outputFileName = newFileName;
+
+        if (fmt === 'jpg' || (fmt as string) === 'jpeg') {
+          updated.scalePercent = 100;
+          const dims = updateResolution(selectedSequence, 100);
+          updated.targetWidth = dims.w;
+          updated.targetHeight = dims.h;
+        }
 
         if (updated.createSubfolder !== false) {
           const rawBase = (inputFolder || selectedSequence.folderPath || '').replace(/[/\\](JPEG|MOV)$/i, '').replace(/_(JPEG|MOV)$/i, '');
@@ -320,18 +331,19 @@ export default function App() {
           if (!scanRes || scanRes.sequences.length === 0) continue;
 
           for (const seq of scanRes.sequences) {
-            // Check missing frames / gap audit
+            // Check missing frames / gap audit (audit only, no disk reports per user request)
             try {
               const gapReport = await window.electronAPI.compareFrames(seq);
               if (gapReport && gapReport.missingCount > 0) {
                 totalMissingGaps += gapReport.missingCount;
-                await window.electronAPI.saveMissingReport(seq.folderPath, gapReport);
               }
             } catch (err) {
               console.error('Gap audit error:', err);
             }
 
-            const dims = updateResolution(seq, activeSettings.scalePercent || 50);
+            const isBatchJpg = activeSettings.outputFormat === 'jpg' || (activeSettings.outputFormat as string) === 'jpeg';
+            const batchScale = isBatchJpg ? (activeSettings.scalePercent === 100 || !activeSettings.scalePercent ? 100 : activeSettings.scalePercent) : (activeSettings.scalePercent || 50);
+            const dims = updateResolution(seq, batchScale);
             const baseDir = scanRes.folderPath || (isExr ? folder.replace(/[/\\][^/\\]+$/, '') : folder);
             const outDir = activeSettings.createSubfolder !== false
               ? getSiblingOutputDir(baseDir, activeSettings.outputFormat)
@@ -374,7 +386,7 @@ export default function App() {
 
       // Notify completion
       try {
-        const gapInfo = totalMissingGaps > 0 ? ` ⚠️ ${totalMissingGaps} missing frame(s) detected. Reports saved.` : '';
+        const gapInfo = totalMissingGaps > 0 ? ` ⚠️ ${totalMissingGaps} missing frame(s) detected.` : '';
         const msg = `Batch complete: ${totalConvertedFrames} frames across ${totalFoldersProcessed} folders converted to ${activeSettings.outputFormat.toUpperCase()}.${gapInfo}`;
         window.electronAPI.notifyCompletion('EXR Batch Conversion Complete', msg);
       } catch (e) {}
@@ -390,13 +402,12 @@ export default function App() {
       const outDir = scanned.outFolder;
       let outName = `${seq.sequenceName}.${activeSettings.outputFormat}`;
 
-      // Check missing frames / gap audit
+      // Check missing frames / gap audit (no disk report saved)
       let gapNotice = '';
       try {
         const gapReport = await window.electronAPI.compareFrames(seq);
         if (gapReport && gapReport.missingCount > 0) {
-          await window.electronAPI.saveMissingReport(outDir, gapReport);
-          gapNotice = ` ⚠️ ${gapReport.missingCount} missing frames detected (expected start ${gapReport.expectedStartFrame})! Report saved in folder.`;
+          gapNotice = ` ⚠️ ${gapReport.missingCount} missing frames detected!`;
         }
       } catch (e) {
         console.error('Gap audit error in single autoStart:', e);
@@ -471,10 +482,13 @@ export default function App() {
         const fileName = `${firstSeq.sequenceName}.${activeFmt}`;
         setOutputFileName(fileName);
 
-        const dims = updateResolution(firstSeq, settings.scalePercent);
+        const isTargetJpg = activeFmt === 'jpg' || (activeFmt as string) === 'jpeg';
+        const targetScale = isTargetJpg ? 100 : (settings.scalePercent || 50);
+        const dims = updateResolution(firstSeq, targetScale);
 
         setSettings((prev) => ({
           ...prev,
+          scalePercent: targetScale,
           outputFormat: activeFmt,
           conversionMode: activeMode,
           outputFolder: initialOutFolder,
@@ -641,7 +655,7 @@ export default function App() {
     if (currentCfg.outputFormat === 'jpg' || (currentCfg.outputFormat as string) === 'jpeg') {
       baseOutFolder = baseOutFolder.replace(/_MOV$/i, '_JPEG').replace(/[/\\]MOV$/i, '/JPEG');
     } else if (currentCfg.outputFormat === 'mov') {
-      baseOutFolder = baseOutFolder.replace(/_JPEG$/i, '_MOV').replace(/[/\\]JPEG$/i, '/MOV');
+      baseOutFolder = baseOutFolder.replace(/_JPEG$/i, '').replace(/_MOV$/i, '').replace(/[/\\](JPEG|MOV)$/i, '');
     }
 
     // Ensure output folder is outside the sequence folder so original EXR folder is never polluted
@@ -657,10 +671,8 @@ export default function App() {
 
     const finalizeAndCompare = async () => {
       try {
-        const comp = await window.electronAPI.compareFolders(seq.folderPath, effectiveOutFolder, 1001);
-        if (comp) {
-          await window.electronAPI.saveFolderComparisonReport(effectiveOutFolder, comp);
-        }
+        await window.electronAPI.compareFolders(seq.folderPath, effectiveOutFolder, seq.firstFrame);
+        // Do NOT auto save report file to disk per user instruction!
       } catch (compErr) {
         console.error('Auto folder comparison error:', compErr);
       }
@@ -1083,7 +1095,7 @@ export default function App() {
         onClose={() => setIsFolderComparisonOpen(false)}
         defaultSourceDir={comparisonSourceDir || selectedSequence?.folderPath || inputFolder || ''}
         defaultTargetDir={comparisonTargetDir || outputFolder || ''}
-        defaultExpectedStart={settings.expectedStartFrame || 1001}
+        defaultExpectedStart={selectedSequence?.firstFrame || settings.expectedStartFrame || 1}
       />
 
       <UpdateNotification />
