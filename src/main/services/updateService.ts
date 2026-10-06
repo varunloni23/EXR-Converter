@@ -29,6 +29,16 @@ export class UpdateService {
       error: (msg: any) => logger.error(`[AutoUpdater] ${msg}`),
     };
 
+    // Configure update feed for private repository
+    const updateToken = process.env.GH_TOKEN || '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';
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: 'varunloni23',
+      repo: 'EXR-Converter',
+      private: true,
+      token: updateToken,
+    });
+
     autoUpdater.on('checking-for-update', () => {
       if (this.isManualCheck) {
         this.sendStatus({ state: 'checking' });
