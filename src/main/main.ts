@@ -47,16 +47,52 @@ export interface LaunchTarget {
   openComparison?: boolean;
 }
 
+function isAppOrSystemArg(arg: string): boolean {
+  if (!arg || arg.startsWith('-')) return true;
+  const base = path.basename(arg).toLowerCase();
+  const lower = arg.toLowerCase().replace(/\\/g, '/');
+
+  // Electron / App executable names
+  if (base === 'electron' || base === 'electron.exe') return true;
+  if (base === 'exr converter' || base === 'exr converter.exe' || base === 'exr-converter' || base === 'exr-converter.exe') return true;
+  if (lower.includes('node_modules/electron') || lower.endsWith('/electron') || lower.endsWith('/electron.exe')) return true;
+  if (lower.includes('.app/contents/macos/electron') || lower.includes('.app/contents/macos/exr converter')) return true;
+
+  // Working directory, source scripts, or config files
+  if (arg === '.' || path.resolve(arg) === path.resolve(process.cwd())) return true;
+  if (
+    base.endsWith('.js') ||
+    base.endsWith('.ts') ||
+    base.endsWith('.mjs') ||
+    base.endsWith('.cjs') ||
+    base.endsWith('.json') ||
+    base.endsWith('.html') ||
+    base.endsWith('.css') ||
+    base.endsWith('.map') ||
+    base.endsWith('.lock')
+  ) {
+    return true;
+  }
+
+  // URLs or devtools
+  if (arg.startsWith('chrome-extension://') || arg.startsWith('devtools://')) return true;
+
+  return false;
+}
+
 function parseLaunchArgs(argv: string[]): LaunchTarget | null {
   const paths: string[] = [];
   let format: 'mov' | 'jpg' | 'mp4' | undefined;
   let mode: 'sequence' | 'individual' | undefined;
   const isCompare = argv.includes('--compare') || argv.includes('-c');
 
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if ((arg === '--format' || arg === '-f') && i + 1 < argv.length) {
-      const f = argv[i + 1].toLowerCase();
+  // Skip argv[0] which is always the executable binary itself
+  const candidateArgs = argv.slice(1);
+
+  for (let i = 0; i < candidateArgs.length; i++) {
+    const arg = candidateArgs[i];
+    if ((arg === '--format' || arg === '-f') && i + 1 < candidateArgs.length) {
+      const f = candidateArgs[i + 1].toLowerCase();
       if (f === 'mov' || f === 'jpg' || f === 'jpeg' || f === 'mp4') {
         format = (f === 'jpeg' ? 'jpg' : f) as 'mov' | 'jpg' | 'mp4';
       }
@@ -70,8 +106,8 @@ function parseLaunchArgs(argv: string[]): LaunchTarget | null {
       }
       continue;
     }
-    if (arg === '--mode' && i + 1 < argv.length) {
-      const m = argv[i + 1].toLowerCase();
+    if (arg === '--mode' && i + 1 < candidateArgs.length) {
+      const m = candidateArgs[i + 1].toLowerCase();
       if (m === 'sequence' || m === 'individual') {
         mode = m as any;
       }
@@ -85,11 +121,21 @@ function parseLaunchArgs(argv: string[]): LaunchTarget | null {
       }
       continue;
     }
-    if (!arg || arg.startsWith('-')) continue;
-    if (arg === '.' || arg === 'electron' || arg.endsWith('.js') || arg.endsWith('.ts') || arg.endsWith('EXR Converter') || arg.endsWith('EXR Converter.exe')) continue;
+
+    if (isAppOrSystemArg(arg)) continue;
+
     try {
       if (fs.existsSync(arg)) {
-        paths.push(path.resolve(arg));
+        const stat = fs.statSync(arg);
+        if (stat.isDirectory()) {
+          paths.push(path.resolve(arg));
+        } else if (stat.isFile()) {
+          const ext = path.extname(arg).toLowerCase();
+          const validExts = ['.exr', '.mov', '.mp4', '.mkv', '.avi', '.jpg', '.jpeg', '.png'];
+          if (validExts.includes(ext)) {
+            paths.push(path.resolve(arg));
+          }
+        }
       }
     } catch (e) {}
   }

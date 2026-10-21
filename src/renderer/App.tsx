@@ -405,7 +405,7 @@ export default function App() {
 
     // Single folder or single EXR file target: scan folder to detect full sequence
     const isExrFile = targetPath.toLowerCase().endsWith('.exr');
-    const scanned = await handleScanFolder(targetPath, false, activeSettings.outputFormat);
+    const scanned = await handleScanFolder(targetPath, false, activeSettings.outputFormat, true);
 
     if (shouldAutoStart && scanned && scanned.firstSeq) {
       const seq = scanned.firstSeq;
@@ -456,8 +456,12 @@ export default function App() {
   const handleScanFolder = async (
     folderPath: string | string[],
     singleFileOnly: boolean = false,
-    targetFormat?: 'mov' | 'jpg' | 'mp4'
+    targetFormat?: 'mov' | 'jpg' | 'mp4',
+    silent: boolean = false
   ) => {
+    if (!folderPath || (Array.isArray(folderPath) && folderPath.length === 0)) {
+      return null;
+    }
     setIsScanning(true);
     try {
       const result = await window.electronAPI.scanFolder(folderPath, singleFileOnly);
@@ -532,11 +536,15 @@ export default function App() {
           fileName,
         };
       } else {
-        alert('No image sequence or video detected in the chosen folder or files.');
+        if (!silent) {
+          alert('No image sequence or video detected in the chosen folder or files.');
+        }
         return null;
       }
     } catch (err: any) {
-      alert(`Error scanning directory: ${err.message}`);
+      if (!silent) {
+        alert(`Error scanning directory: ${err.message}`);
+      }
       return null;
     } finally {
       setIsScanning(false);

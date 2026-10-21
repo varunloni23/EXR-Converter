@@ -29,25 +29,17 @@ export class UpdateService {
       error: (msg: any) => logger.error(`[AutoUpdater] ${msg}`),
     };
 
-    // Configure update feed for repository updates
-    const getResolvedToken = () => {
-      if (process.env.GH_TOKEN) return process.env.GH_TOKEN;
-      const prefix = ['git', 'hub_', 'pat_'].join('');
-      const p1 = '11BKJKO5Q0YjrsI7';
-      const p2 = 'g57yjS_YdSOgD9NK';
-      const p3 = 'CdAvDpf45A0KaHnT';
-      const p4 = 'vmjyZYwL9ej9b8Su';
-      const p5 = 'iRUIIPXT23eLdbtjaa';
-      return `${prefix}${p1}${p2}${p3}${p4}${p5}`;
-    };
-    const updateToken = getResolvedToken();
-    autoUpdater.setFeedURL({
+    // Configure update feed for repository updates (public releases require no token)
+    const feedConfig: any = {
       provider: 'github',
       owner: 'varunloni23',
       repo: 'EXR-Converter',
-      private: true,
-      token: updateToken,
-    });
+    };
+    if (process.env.GH_TOKEN) {
+      feedConfig.token = process.env.GH_TOKEN;
+      feedConfig.private = true;
+    }
+    autoUpdater.setFeedURL(feedConfig);
 
     autoUpdater.on('checking-for-update', () => {
       if (this.isManualCheck) {
