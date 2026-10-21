@@ -71,7 +71,8 @@ export interface ElectronAPI {
     report: FolderComparisonResult
   ) => Promise<string | null>;
 
-  // Auto Updater
+  // App & Auto Updater
+  getVersion: () => Promise<string>;
   checkForUpdates: () => Promise<UpdateStatus>;
   getUpdateStatus: () => Promise<UpdateStatus>;
   quitAndInstallUpdate: () => Promise<boolean>;
@@ -129,6 +130,7 @@ const api: ElectronAPI = {
   saveFolderComparisonReport: (targetDir, report) =>
     ipcRenderer.invoke('sequence:saveFolderComparisonReport', targetDir, report),
 
+  getVersion: () => ipcRenderer.invoke('app:getVersion'),
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   getUpdateStatus: () => ipcRenderer.invoke('updater:getStatus'),
   quitAndInstallUpdate: () => ipcRenderer.invoke('updater:quitAndInstall'),

@@ -24,17 +24,17 @@ export const MissingFramesModal: React.FC<MissingFramesModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 select-none animate-fadeIn">
-      <div className="studio-card max-w-lg w-full p-6 border-studio-warning/40 shadow-2xl relative">
+      <div className="studio-card max-w-lg w-full max-h-[90vh] flex flex-col p-6 border-studio-warning/40 shadow-2xl relative">
         {/* Close icon */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-studio-textMuted hover:text-studio-text p-1 transition-colors"
+          className="absolute top-4 right-4 text-studio-textMuted hover:text-studio-text p-1 transition-colors z-10"
         >
           <X className="w-4 h-4" />
         </button>
 
         {/* Header */}
-        <div className="flex items-center space-x-3 mb-4">
+        <div className="flex items-center space-x-3 mb-4 flex-shrink-0">
           <div className="w-10 h-10 rounded-full bg-studio-warningMuted border border-studio-warning/30 flex items-center justify-center text-studio-warning flex-shrink-0">
             <AlertTriangle className="w-5 h-5" />
           </div>
@@ -44,10 +44,11 @@ export const MissingFramesModal: React.FC<MissingFramesModalProps> = ({
           </div>
         </div>
 
-        <p className="text-xs text-studio-textSecondary mb-4">
-          Sequence range is <code className="font-mono text-studio-text">{firstFrame} → {lastFrame}</code>, but{' '}
-          <strong className="text-studio-warning">{missingFrames.length} frames</strong> are missing from the folder:
-        </p>
+        <div className="flex-1 overflow-y-auto pr-1">
+          <p className="text-xs text-studio-textSecondary mb-4">
+            Sequence range is <code className="font-mono text-studio-text">{firstFrame} → {lastFrame}</code>, but{' '}
+            <strong className="text-studio-warning">{missingFrames.length} frames</strong> are missing from the folder:
+          </p>
 
         {/* Missing Frames List */}
         <div className="max-h-48 overflow-y-auto p-3 rounded-md bg-studio-bg border border-studio-border mb-5">
@@ -68,15 +69,16 @@ export const MissingFramesModal: React.FC<MissingFramesModalProps> = ({
           </div>
         </div>
 
-        <div className="p-3 rounded-md bg-studio-warning/10 border border-studio-warning/20 text-xs text-studio-warning mb-6 flex items-start space-x-2">
+        <div className="p-3 rounded-md bg-studio-warning/10 border border-studio-warning/20 text-xs text-studio-warning mb-2 flex items-start space-x-2">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>
             Converting an incomplete sequence may cause sudden visual jumps or timing discrepancies in editorial review.
           </span>
         </div>
+      </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center justify-end space-x-3">
+      {/* Action Buttons */}
+      <div className="flex items-center justify-end space-x-3 pt-4 border-t border-studio-border flex-shrink-0">
           <button
             onClick={onClose}
             className="studio-button-secondary px-4 py-2 text-xs font-medium"

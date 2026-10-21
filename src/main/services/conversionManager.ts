@@ -90,13 +90,12 @@ export class ConversionManager {
     const outputFileName = settings.outputFileName || `${sequence.sequenceName}.${settings.outputFormat}`;
     const outputPath = path.join(targetFolder, outputFileName);
 
-    // For JPG, resolution must be 100% identical to source EXR by default
-    const effectiveScale = isJpg
-      ? (settings.scalePercent === 100 || !settings.scalePercent ? 100 : settings.scalePercent)
-      : (settings.scalePercent || 50);
-    const dims = isJpg && effectiveScale === 100
+    // Resolution requirements:
+    // 1. JPG = Source Dimension (no resolution drop)
+    // 2. MOV = 1920x1080 (fit to Width or fit to Height, preserving aspect ratio, no crop)
+    const dims = isJpg
       ? { targetWidth: sequence.width, targetHeight: sequence.height }
-      : ffmpegService.calculateDimensions(sequence.width, sequence.height, effectiveScale);
+      : ffmpegService.calculateMovDimensions(sequence.width, sequence.height);
 
     const job: ConversionJob = {
       id: jobId,

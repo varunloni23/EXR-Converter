@@ -50,7 +50,7 @@ export const LogViewerModal: React.FC<LogViewerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 select-none">
-      <div className="studio-card max-w-3xl w-full h-[620px] flex flex-col p-6 shadow-2xl relative border-studio-borderLight">
+      <div className="studio-card max-w-3xl w-full h-[620px] max-h-[90vh] flex flex-col p-6 shadow-2xl relative border-studio-borderLight">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-studio-border flex-shrink-0">
           <div className="flex items-center space-x-2.5">

@@ -204,11 +204,11 @@ export default function App() {
         setOutputFileName(newFileName);
         updated.outputFileName = newFileName;
 
+        const dims = updateResolution(selectedSequence, fmt);
+        updated.targetWidth = dims.w;
+        updated.targetHeight = dims.h;
         if (fmt === 'jpg' || (fmt as string) === 'jpeg') {
           updated.scalePercent = 100;
-          const dims = updateResolution(selectedSequence, 100);
-          updated.targetWidth = dims.w;
-          updated.targetHeight = dims.h;
         }
 
         if (updated.createSubfolder !== false) {
@@ -227,6 +227,9 @@ export default function App() {
         const newFileName = `${selectedSequence.sequenceName}.${newSettings.outputFormat}`;
         setOutputFileName(newFileName);
         updated.outputFileName = newFileName;
+        const dims = updateResolution(selectedSequence, newSettings.outputFormat);
+        updated.targetWidth = dims.w;
+        updated.targetHeight = dims.h;
         checkCollisionAndDiskSpace(outputFolder, newFileName, selectedSequence, updated.targetWidth, updated.targetHeight);
       }
       window.electronAPI.saveSettings(updated).catch(console.error);
@@ -234,11 +237,20 @@ export default function App() {
     });
   };
 
-  // Update target dimensions when sequence or scalePercent changes
-  const updateResolution = (seq: ExrSequence, scalePct: number) => {
-    const factor = scalePct / 100;
-    let w = Math.floor(Math.round(seq.width * factor) / 2) * 2;
-    let h = Math.floor(Math.round(seq.height * factor) / 2) * 2;
+  // Target resolution rules:
+  // 1. JPG = Source Dimension (no resolution drop)
+  // 2. MOV = 1920x1080 (fit to Width or fit to Height, preserving aspect ratio, no crop)
+  const updateResolution = (seq: ExrSequence, format: string = settings.outputFormat) => {
+    if (format === 'jpg' || (format as string) === 'jpeg') {
+      return { w: seq.width, h: seq.height };
+    }
+    const scale = Math.min(1920 / seq.width, 1080 / seq.height);
+    let w = Math.round(seq.width * scale);
+    let h = Math.round(seq.height * scale);
+    w = Math.floor(w / 2) * 2;
+    h = Math.floor(h / 2) * 2;
+    if (w > 1920) w = 1920;
+    if (h > 1080) h = 1080;
     if (w < 2) w = 2;
     if (h < 2) h = 2;
     return { w, h };
@@ -341,9 +353,7 @@ export default function App() {
               console.error('Gap audit error:', err);
             }
 
-            const isBatchJpg = activeSettings.outputFormat === 'jpg' || (activeSettings.outputFormat as string) === 'jpeg';
-            const batchScale = isBatchJpg ? (activeSettings.scalePercent === 100 || !activeSettings.scalePercent ? 100 : activeSettings.scalePercent) : (activeSettings.scalePercent || 50);
-            const dims = updateResolution(seq, batchScale);
+            const dims = updateResolution(seq, activeSettings.outputFormat);
             const baseDir = scanRes.folderPath || (isExr ? folder.replace(/[/\\][^/\\]+$/, '') : folder);
             const outDir = activeSettings.createSubfolder !== false
               ? getSiblingOutputDir(baseDir, activeSettings.outputFormat)
@@ -483,12 +493,11 @@ export default function App() {
         setOutputFileName(fileName);
 
         const isTargetJpg = activeFmt === 'jpg' || (activeFmt as string) === 'jpeg';
-        const targetScale = isTargetJpg ? 100 : (settings.scalePercent || 50);
-        const dims = updateResolution(firstSeq, targetScale);
+        const dims = updateResolution(firstSeq, activeFmt);
 
         setSettings((prev) => ({
           ...prev,
-          scalePercent: targetScale,
+          scalePercent: isTargetJpg ? 100 : 50,
           outputFormat: activeFmt,
           conversionMode: activeMode,
           outputFolder: initialOutFolder,
@@ -614,7 +623,7 @@ export default function App() {
     try {
       let firstJob: ConversionJob | null = null;
       for (const seq of detectedSequences) {
-        const dims = updateResolution(seq, settings.scalePercent);
+        const dims = updateResolution(seq, settings.outputFormat);
         const fileName = `${seq.sequenceName}.${settings.outputFormat}`;
         const seqSettings: ConversionSettings = {
           ...settings,
@@ -815,7 +824,7 @@ export default function App() {
       />
 
       {/* Main Workspace Stage */}
-      <main className="flex-1 p-6 max-w-5xl mx-auto w-full flex flex-col justify-center">
+      <main className={`flex-1 p-6 max-w-5xl mx-auto w-full flex flex-col ${screenState === 'empty' ? 'justify-center' : 'justify-start'}`}>
         {screenState === 'empty' && (
           <DropZone
             onSelectFolder={handleSelectInputFolder}
@@ -834,7 +843,7 @@ export default function App() {
                 setSelectedSequence(seq);
                 const fileName = `${seq.sequenceName}.${settings.outputFormat}`;
                 setOutputFileName(fileName);
-                const dims = updateResolution(seq, settings.scalePercent);
+                const dims = updateResolution(seq, settings.outputFormat);
                 setSettings((p) => ({ ...p, targetWidth: dims.w, targetHeight: dims.h, outputFileName: fileName }));
                 checkCollisionAndDiskSpace(outputFolder, fileName, seq, dims.w, dims.h);
               }}
@@ -871,7 +880,9 @@ export default function App() {
                 </span>
                 <span>•</span>
                 <span>
-                  {settings.targetWidth} × {settings.targetHeight} ({settings.scalePercent}%) @ {settings.fps} FPS
+                  {settings.outputFormat === 'jpg'
+                    ? `Source Dimension: ${settings.targetWidth || selectedSequence.width} × ${settings.targetHeight || selectedSequence.height} (1:1 No Drop)`
+                    : `1920×1080 Fit: ${settings.targetWidth} × ${settings.targetHeight} (No Crop) @ ${settings.fps} FPS`}
                 </span>
               </div>
 

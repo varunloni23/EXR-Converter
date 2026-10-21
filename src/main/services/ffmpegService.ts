@@ -132,6 +132,30 @@ export class FFmpegService {
   }
 
   /**
+   * Calculates target dimensions for MOV: fits within 1920x1080 bounding box
+   * (fits to width or fits to height, strictly preserving aspect ratio without cropping).
+   */
+  public calculateMovDimensions(
+    originalWidth: number,
+    originalHeight: number
+  ): { targetWidth: number; targetHeight: number } {
+    const scale = Math.min(1920 / originalWidth, 1080 / originalHeight);
+    let targetWidth = Math.round(originalWidth * scale);
+    let targetHeight = Math.round(originalHeight * scale);
+
+    // Make divisible by 2 for yuv420p H.264
+    targetWidth = Math.floor(targetWidth / 2) * 2;
+    targetHeight = Math.floor(targetHeight / 2) * 2;
+
+    if (targetWidth > 1920) targetWidth = 1920;
+    if (targetHeight > 1080) targetHeight = 1080;
+    if (targetWidth < 2) targetWidth = 2;
+    if (targetHeight < 2) targetHeight = 2;
+
+    return { targetWidth, targetHeight };
+  }
+
+  /**
    * Maps Photoshop JPEG Quality scale (1 to 12) to FFmpeg MJPEG quality parameter (q:v).
    * Quality 8 is Photoshop's standard "Maximum" preset (very high fidelity).
    */
@@ -534,11 +558,9 @@ export class FFmpegService {
       const qv = this.mapPhotoshopQualityToFfmpegQ(settings.jpegQuality || 8);
       const formatOpt = settings.jpegFormatOption || 'baseline';
 
+      // For JPG: Always convert at 100% Source Dimension (no resolution drop)
       const colorFilter = 'colorspace=all=bt709:trc=srgb:iall=bt709:itrc=linear';
-      const needsScale = job.targetWidth !== seq.width || job.targetHeight !== seq.height;
-      const scalePart = needsScale ? `scale=${job.targetWidth}:${job.targetHeight}:flags=lanczos` : '';
-      const filterParts = [colorFilter, scalePart].filter(Boolean);
-      const effectiveVf = filterParts.join(',');
+      const effectiveVf = colorFilter;
 
       // If sequence has no missing frames and has an image2 pattern, use single-pass image2
       if (!seq.hasMissingFrames && seq.pattern) {

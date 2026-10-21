@@ -17,27 +17,28 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({
   onUpdateSettings,
   onOpenGapScanner,
 }) => {
-  // Calculate target dimensions
-  const calculateTarget = (scalePct: number) => {
-    const factor = scalePct / 100;
-    const w = Math.floor(Math.round(sequence.width * factor) / 2) * 2;
-    const h = Math.floor(Math.round(sequence.height * factor) / 2) * 2;
+  // Calculate target dimensions per format rules:
+  // - JPG: Source Dimension (no resolution drop)
+  // - MOV: 1920x1080 (fit to Width or Height, preserving aspect ratio, no crop)
+  const calculateTarget = (format: string = settings.outputFormat) => {
+    if (format === 'jpg' || (format as string) === 'jpeg') {
+      return { w: sequence.width, h: sequence.height };
+    }
+    const scale = Math.min(1920 / sequence.width, 1080 / sequence.height);
+    let w = Math.round(sequence.width * scale);
+    let h = Math.round(sequence.height * scale);
+    w = Math.floor(w / 2) * 2;
+    h = Math.floor(h / 2) * 2;
+    if (w > 1920) w = 1920;
+    if (h > 1080) h = 1080;
+    if (w < 2) w = 2;
+    if (h < 2) h = 2;
     return { w, h };
-  };
-
-  const { w: currentTargetW, h: currentTargetH } = calculateTarget(settings.scalePercent);
-
-  const handleScaleSelect = (pct: number) => {
-    const { w, h } = calculateTarget(pct);
-    onUpdateSettings({
-      scalePercent: pct,
-      targetWidth: w,
-      targetHeight: h,
-    });
   };
 
   const isMov = settings.outputFormat === 'mov';
   const isJpg = settings.outputFormat === 'jpg';
+  const { w: currentTargetW, h: currentTargetH } = calculateTarget(settings.outputFormat);
 
   return (
     <div className="studio-card p-5 select-none space-y-4">
@@ -51,7 +52,7 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({
         </div>
 
         <div className="text-[11px] font-mono text-studio-textMuted">
-          {isMov ? 'QuickTime H.264 (1 Video)' : 'JPEG Frames (Quality 8)'}
+          {isMov ? 'QuickTime H.264 (1920×1080 Fit)' : `JPEG Frames (${sequence.width}×${sequence.height})`}
         </div>
       </div>
 
@@ -60,14 +61,17 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({
         {/* Format 1: QuickTime MOV (1 Merged Video) */}
         <button
           type="button"
-          onClick={() =>
+          onClick={() => {
+            const dims = calculateTarget('mov');
             onUpdateSettings({
               outputFormat: 'mov',
+              targetWidth: dims.w,
+              targetHeight: dims.h,
               bitrateMbps: 40,
               bitrateMode: 'cbr',
               conversionMode: 'sequence', // Always 1 merged video
-            })
-          }
+            });
+          }}
           className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative ${
             isMov
               ? 'bg-studio-accent/15 border-studio-accent shadow-glow-accent'
@@ -86,22 +90,25 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({
             )}
           </div>
           <p className="text-[11px] text-studio-textSecondary font-mono">
-            H.264 • 40 Mbps CBR • 1 Merged Video
+            1920×1080 Fit (No Crop) • 40 Mbps CBR
           </p>
         </button>
 
         {/* Format 2: JPEG Image Sequence */}
         <button
           type="button"
-          onClick={() =>
+          onClick={() => {
+            const dims = calculateTarget('jpg');
             onUpdateSettings({
               outputFormat: 'jpg',
+              targetWidth: dims.w,
+              targetHeight: dims.h,
               scalePercent: 100,
               jpegQuality: settings.jpegQuality || 8,
               jpegFormatOption: settings.jpegFormatOption || 'baseline',
               conversionMode: 'individual',
-            })
-          }
+            });
+          }}
           className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative ${
             isJpg
               ? 'bg-studio-accent/15 border-studio-accent shadow-glow-accent'
@@ -120,7 +127,7 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({
             )}
           </div>
           <p className="text-[11px] text-studio-textSecondary font-mono">
-            Quality 8 Maximum • Baseline / Progressive
+            Source Dimension ({sequence.width}×{sequence.height}) • No Drop
           </p>
         </button>
       </div>
@@ -151,7 +158,7 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({
 
       {/* Minimal Settings Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-        {/* 1. Resolution Scale */}
+        {/* 1. Resolution Rule Display */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium text-studio-textSecondary">Resolution</label>
@@ -160,30 +167,25 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-4 gap-1.5">
-            {[
-              { label: '50%*', val: 50 },
-              { label: '100%', val: 100 },
-              { label: '75%', val: 75 },
-              { label: '25%', val: 25 },
-            ].map((item) => {
-              const active = settings.scalePercent === item.val;
-              return (
-                <button
-                  key={item.val}
-                  type="button"
-                  onClick={() => handleScaleSelect(item.val)}
-                  className={`py-1.5 text-xs font-mono font-medium rounded-lg border transition-colors cursor-pointer ${
-                    active
-                      ? 'bg-studio-accent/20 border-studio-accent text-studio-accent'
-                      : 'bg-studio-bg border-studio-border/60 text-studio-textSecondary hover:text-studio-text'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
+          {isMov ? (
+            <div className="p-2 rounded-lg bg-studio-bg border border-studio-border/70 flex items-center justify-between">
+              <span className="text-[11px] font-mono text-studio-text">
+                1920×1080 (Fit Aspect)
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                No Crop
+              </span>
+            </div>
+          ) : (
+            <div className="p-2 rounded-lg bg-studio-bg border border-studio-border/70 flex items-center justify-between">
+              <span className="text-[11px] font-mono text-studio-text">
+                Source Dimension (1:1)
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-studio-accent/15 text-studio-accent border border-studio-accent/30">
+                No Drop
+              </span>
+            </div>
+          )}
         </div>
 
         {/* 2. Frame Rate */}

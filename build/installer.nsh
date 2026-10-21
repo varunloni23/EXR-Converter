@@ -1,10 +1,21 @@
+!macro preInit
+  ; Terminate any running instance of EXR Converter before process check runs
+  nsExec::Exec 'taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T'
+  nsExec::Exec 'taskkill /F /IM "EXR Converter.exe" /T'
+  nsExec::Exec 'taskkill /F /IM "exr-converter.exe" /T'
+!macroend
+
 !macro customInit
   ; Terminate any running instance of EXR Converter so setup never blocks with 'cannot be closed'
   nsExec::Exec 'taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T'
+  nsExec::Exec 'taskkill /F /IM "EXR Converter.exe" /T'
+  nsExec::Exec 'taskkill /F /IM "exr-converter.exe" /T'
 !macroend
 
 !macro customUnInstallCheck
   nsExec::Exec 'taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T'
+  nsExec::Exec 'taskkill /F /IM "EXR Converter.exe" /T'
+  nsExec::Exec 'taskkill /F /IM "exr-converter.exe" /T'
 !macroend
 
 !macro customInstall

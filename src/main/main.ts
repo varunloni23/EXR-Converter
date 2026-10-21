@@ -17,6 +17,7 @@ import { conversionManager } from './services/conversionManager';
 import { settingsService } from './services/settingsService';
 import { historyService } from './services/historyService';
 import { updateService } from './services/updateService';
+import { trayService } from './services/trayService';
 import { ConversionSettings, ExrSequence, FrameComparisonReport, FolderComparisonResult } from '../shared/types';
 
 protocol.registerSchemesAsPrivileged([
@@ -117,7 +118,7 @@ let isRendererReady = false;
 
 const parsedTarget = parseLaunchArgs(process.argv);
 const isCompareLaunch = process.argv.includes('--compare') || process.argv.includes('-c');
-const isBackgroundLaunch = !isCompareLaunch && (process.argv.includes('--background') || Boolean(parsedTarget));
+const isBackgroundLaunch = false; // Always show window so user sees conversion progress
 
 if (parsedTarget) {
   initialTarget = parsedTarget;
@@ -126,6 +127,9 @@ if (parsedTarget) {
 function dispatchOpenPath(target: LaunchTarget) {
   initialTarget = target;
   if (mainWindow && !mainWindow.isDestroyed() && isRendererReady) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
     logger.info(`Dispatching app:openPath to renderer: ${target.path} (format=${target.format || 'default'}, mode=${target.mode || 'default'}, compare=${Boolean(target.openComparison)})`);
     mainWindow.webContents.send('app:openPath', target);
     initialTarget = null;
@@ -140,22 +144,21 @@ if (!gotTheLock) {
 } else {
   app.on('second-instance', (_, commandLine, __, additionalData: any) => {
     const rawArgs = (additionalData && Array.isArray(additionalData.argv)) ? additionalData.argv : commandLine;
-    const isBg = rawArgs.includes('--background');
     const isCompare = rawArgs.includes('--compare') || rawArgs.includes('-c');
     const parsed = parseLaunchArgs(rawArgs);
     if (parsed) {
       if (isCompare) {
         parsed.openComparison = true;
         parsed.autoStart = false;
-        if (mainWindow) {
-          if (mainWindow.isMinimized()) mainWindow.restore();
-          mainWindow.show();
-          mainWindow.focus();
-        }
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
       }
       logger.info(`Received context-menu launch from second instance: ${parsed.path} (format=${parsed.format || 'default'}, mode=${parsed.mode || 'default'}, compare=${Boolean(parsed.openComparison)})`);
       dispatchOpenPath(parsed);
-    } else if (mainWindow && !isBg) {
+    } else if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
@@ -193,6 +196,16 @@ function createWindow(forceShow: boolean = false) {
 
   conversionManager.setMainWindow(mainWindow);
   updateService.setWindow(mainWindow);
+  trayService.setMainWindow(mainWindow);
+
+  // Close to tray on Windows and Mac unless explicitly quitting
+  mainWindow.on('close', (event) => {
+    if (!trayService.getIsQuitting()) {
+      event.preventDefault();
+      mainWindow?.hide();
+      trayService.showBalloonOnce();
+    }
+  });
 
   mainWindow.webContents.on('preload-error', (event, preloadPath, error) => {
     console.error(`[PRELOAD ERROR] at ${preloadPath}:`, error);
@@ -254,6 +267,18 @@ app.whenReady().then(() => {
 
   registerIpcHandlers();
   createWindow();
+  trayService.init();
+  if (mainWindow) {
+    trayService.setMainWindow(mainWindow);
+  }
+
+  // Periodic 15-minute background update check
+  setInterval(() => {
+    if (app.isPackaged) {
+      logger.info('[AutoUpdater] 15-minute periodic check running...');
+      updateService.checkForUpdates(false).catch((err) => logger.warn(`15min periodic update check error: ${err}`));
+    }
+  }, 15 * 60 * 1000);
 
   app.on('activate', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -266,13 +291,20 @@ app.whenReady().then(() => {
   });
 });
 
+app.on('before-quit', () => {
+  trayService.setIsQuitting(true);
+});
+
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  if (trayService.getIsQuitting()) {
     app.quit();
   }
 });
 
 function registerIpcHandlers() {
+  // App Version
+  ipcMain.handle('app:getVersion', () => app.getVersion());
+
   // 0. Initial Launch Target (from right-click context menu or file open)
   ipcMain.handle('app:getInitialPath', async () => {
     isRendererReady = true;

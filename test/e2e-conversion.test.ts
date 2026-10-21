@@ -83,6 +83,19 @@ async function runE2eTests() {
     console.log(`   ✓ 3840x2160 at 50% = ${scale4k.targetWidth}x${scale4k.targetHeight}`);
     if (scale4k.targetWidth !== 1920 || scale4k.targetHeight !== 1080) throw new Error('4K scaling incorrect');
 
+    console.log('\n5b. Testing MOV 1920x1080 Fit (No Crop)...');
+    const mov169 = ffmpegService.calculateMovDimensions(3840, 2160);
+    console.log(`   ✓ 4K 16:9 (3840x2160) -> ${mov169.targetWidth}x${mov169.targetHeight}`);
+    if (mov169.targetWidth !== 1920 || mov169.targetHeight !== 1080) throw new Error('MOV 16:9 fit incorrect');
+
+    const movScope = ffmpegService.calculateMovDimensions(3840, 1606);
+    console.log(`   ✓ Scope 2.39:1 (3840x1606) -> ${movScope.targetWidth}x${movScope.targetHeight} (Fit to Width, No Crop)`);
+    if (movScope.targetWidth !== 1920 || movScope.targetHeight > 1080) throw new Error('MOV Scope fit incorrect');
+
+    const mov43 = ffmpegService.calculateMovDimensions(2048, 1536);
+    console.log(`   ✓ 4:3 Academy (2048x1536) -> ${mov43.targetWidth}x${mov43.targetHeight} (Fit to Height, No Crop)`);
+    if (mov43.targetHeight !== 1080 || mov43.targetWidth > 1920) throw new Error('MOV 4:3 fit incorrect');
+
     // 6. Test Real FFmpeg Conversion to 50% scale H.264 MP4
     console.log('\n6. Executing Real Conversion to H.264 MP4 (50% scale)...');
     const outputVideoPath = path.join(testDir, 'SHOT_010.mp4');

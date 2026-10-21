@@ -49,6 +49,14 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = () => {
     }
   };
 
+  const handleLater = () => {
+    setIsDismissed(true);
+    // Snooze for 15 minutes before re-prompting
+    setTimeout(() => {
+      setIsDismissed(false);
+    }, 15 * 60 * 1000);
+  };
+
   return (
     <div className="fixed bottom-5 right-5 z-50 max-w-sm w-full animate-in fade-in slide-in-from-bottom-3 duration-300">
       <div className="bg-studio-card/95 border border-studio-accent/40 rounded-xl p-4 shadow-2xl backdrop-blur-xl">
@@ -84,9 +92,9 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = () => {
           </div>
 
           <button
-            onClick={() => setIsDismissed(true)}
+            onClick={handleLater}
             className="text-studio-textMuted hover:text-white p-1 rounded-md transition-colors"
-            title="Dismiss"
+            title="Dismiss (remind in 15 mins)"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -106,10 +114,10 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = () => {
         {status.state === 'downloaded' && (
           <div className="mt-3 flex items-center justify-end space-x-2">
             <button
-              onClick={() => setIsDismissed(true)}
-              className="px-2.5 py-1 text-xs text-studio-textMuted hover:text-white transition-colors"
+              onClick={handleLater}
+              className="px-2.5 py-1 text-xs text-studio-textMuted hover:text-white transition-colors cursor-pointer"
             >
-              Later
+              Later (15m)
             </button>
             <button
               onClick={handleRestart}

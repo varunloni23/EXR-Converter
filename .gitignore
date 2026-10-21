@@ -30,3 +30,8 @@ Thumbs.db
 *_MP4/
 JPEG/
 MOV/
+test1/
+windows_issues/
+*.mov
+*.mp4
+

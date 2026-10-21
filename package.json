@@ -1,6 +1,6 @@
 {
   "name": "exr-converter",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Professional EXR sequence converter to editorial-ready video",
   "main": "dist-electron/main.js",
   "scripts": {

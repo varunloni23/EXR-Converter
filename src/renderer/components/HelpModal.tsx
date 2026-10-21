@@ -11,15 +11,15 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 select-none">
-      <div className="studio-card max-w-lg w-full p-6 shadow-2xl relative border-studio-borderLight">
+      <div className="studio-card max-w-lg w-full max-h-[90vh] flex flex-col p-6 shadow-2xl relative border-studio-borderLight">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-studio-textMuted hover:text-studio-text p-1 transition-colors"
+          className="absolute top-4 right-4 text-studio-textMuted hover:text-studio-text p-1 transition-colors z-10"
         >
           <X className="w-4 h-4" />
         </button>
 
-        <div className="flex items-center space-x-3 mb-5 pb-3 border-b border-studio-border">
+        <div className="flex items-center space-x-3 mb-5 pb-3 border-b border-studio-border flex-shrink-0">
           <div className="w-8 h-8 rounded-lg bg-studio-accent/20 border border-studio-accent/30 flex items-center justify-center text-studio-accent">
             <HelpCircle className="w-4 h-4" />
           </div>
@@ -29,7 +29,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        <div className="space-y-4 text-xs text-studio-textSecondary">
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs text-studio-textSecondary">
           <div>
             <h4 className="font-semibold text-studio-text mb-1 flex items-center space-x-1.5 font-mono">
               <Film className="w-3.5 h-3.5 text-studio-accent" />
@@ -67,7 +67,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        <div className="mt-6 pt-4 border-t border-studio-border flex justify-end">
+        <div className="mt-4 pt-4 border-t border-studio-border flex justify-end flex-shrink-0">
           <button
             onClick={onClose}
             className="studio-button-primary px-5 py-2 text-xs font-medium"
