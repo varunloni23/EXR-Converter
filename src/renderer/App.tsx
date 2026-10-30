@@ -17,7 +17,9 @@ import { HelpModal } from './components/HelpModal';
 import { QueueDrawer } from './components/QueueDrawer';
 import { FolderComparisonModal } from './components/FolderComparisonModal';
 import { UpdateNotification } from './components/UpdateNotification';
+import { WatermarkRemoverView, WatermarkExternalLaunch } from './components/WatermarkRemoverView';
 import {
+  AppMode,
   ConversionJob,
   ConversionSettings,
   DiskSpaceInfo,
@@ -31,6 +33,8 @@ import { Play, Sparkles, Layers, Film, Search, FolderCheck } from 'lucide-react'
 export default function App() {
   const lastTargetRef = useRef<{ path: string; time: number } | null>(null);
   // Navigation & Screen state
+  const [activeMode, setActiveMode] = useState<AppMode>('exr');
+  const [watermarkLaunch, setWatermarkLaunch] = useState<WatermarkExternalLaunch | null>(null);
   const [screenState, setScreenState] = useState<'empty' | 'ready' | 'converting' | 'completed' | 'failed'>('empty');
 
   // Sequence state
@@ -266,6 +270,7 @@ export default function App() {
           format?: 'mov' | 'mp4' | 'jpg';
           mode?: 'sequence' | 'individual';
           openComparison?: boolean;
+          openWatermarkRemover?: boolean;
         }
       | string
       | null
@@ -278,6 +283,21 @@ export default function App() {
     const shouldAutoStart = isObj ? Boolean(target.autoStart) : false;
     const formatOverride = isObj ? target.format : undefined;
     const modeOverride = isObj ? target.mode : undefined;
+
+    // Direct Right-Click Gemini Watermark Remover Launch (Single/Multi File or Single/Multi Folder)
+    if (isObj && target.openWatermarkRemover) {
+      setActiveMode('watermark');
+      if (targetPaths.length > 0) {
+        setWatermarkLaunch({
+          id: Date.now() + Math.floor(Math.random() * 10000),
+          paths: targetPaths,
+          autoStart: shouldAutoStart,
+        });
+      }
+      return;
+    }
+
+    setActiveMode('exr');
 
     // Direct Right-Click Compare Launch
     if (isObj && (target as any).openComparison) {
@@ -818,6 +838,8 @@ export default function App() {
       {/* Header */}
       <Header
         hardwareInfo={hardwareInfo}
+        activeMode={activeMode}
+        onSwitchMode={setActiveMode}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenLogs={() => setIsLogsOpen(true)}
         onOpenHelp={() => setIsHelpOpen(true)}
@@ -832,7 +854,18 @@ export default function App() {
       />
 
       {/* Main Workspace Stage */}
-      <main className={`flex-1 p-6 max-w-5xl mx-auto w-full flex flex-col ${screenState === 'empty' ? 'justify-center' : 'justify-start'}`}>
+      <main
+        className={`flex-1 p-6 max-w-5xl mx-auto w-full flex flex-col ${
+          activeMode === 'exr' && screenState === 'empty' ? 'justify-center' : 'justify-start'
+        }`}
+      >
+        {/* Gemini Watermark Remover Tab (kept mounted so running batches preserve state) */}
+        <div className={activeMode === 'watermark' ? 'w-full' : 'hidden'}>
+          <WatermarkRemoverView externalLaunch={watermarkLaunch} />
+        </div>
+
+        {/* EXR Converter Tab */}
+        <div className={activeMode === 'exr' ? 'w-full' : 'hidden'}>
         {screenState === 'empty' && (
           <DropZone
             onSelectFolder={handleSelectInputFolder}
@@ -1015,6 +1048,7 @@ export default function App() {
             />
           </div>
         )}
+        </div>
       </main>
 
       {/* Modals & Drawers */}

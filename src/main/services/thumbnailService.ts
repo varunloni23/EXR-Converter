@@ -37,7 +37,7 @@ export class ThumbnailService {
         'pipe:1',
       ];
 
-      const child = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
       const chunks: Buffer[] = [];
 
       child.stdout.on('data', (chunk) => {

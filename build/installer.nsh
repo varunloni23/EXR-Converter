@@ -60,17 +60,85 @@
   WriteRegStr HKCR "Directory\Background\shell\EXRConverterCompare" "" "Compare Folders"
   WriteRegStr HKCR "Directory\Background\shell\EXRConverterCompare" "Icon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
   WriteRegStr HKCR "Directory\Background\shell\EXRConverterCompare\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --compare "%V"'
+
+  ; 9. Right click on Folder(s): Remove Watermark
+  WriteRegStr HKCR "Directory\shell\GeminiWatermarkRemover" "" "Remove Watermark"
+  WriteRegStr HKCR "Directory\shell\GeminiWatermarkRemover" "Icon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr HKCR "Directory\shell\GeminiWatermarkRemover" "MultiSelectModel" "Player"
+  WriteRegStr HKCR "Directory\shell\GeminiWatermarkRemover\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --background --watermark "%1"'
+
+  ; 10. Right click on Folder background: Remove Watermark
+  WriteRegStr HKCR "Directory\Background\shell\GeminiWatermarkRemover" "" "Remove Watermark"
+  WriteRegStr HKCR "Directory\Background\shell\GeminiWatermarkRemover" "Icon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr HKCR "Directory\Background\shell\GeminiWatermarkRemover\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --background --watermark "%V"'
+
+  ; 11. Right click on Image & Video File(s) (PerceivedType image/video + explicit extensions): Remove Watermark
+  WriteRegStr HKCR "SystemFileAssociations\image\shell\GeminiWatermarkRemover" "" "Remove Watermark"
+  WriteRegStr HKCR "SystemFileAssociations\image\shell\GeminiWatermarkRemover" "Icon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr HKCR "SystemFileAssociations\image\shell\GeminiWatermarkRemover" "MultiSelectModel" "Player"
+  WriteRegStr HKCR "SystemFileAssociations\image\shell\GeminiWatermarkRemover\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --background --watermark "%1"'
+
+  WriteRegStr HKCR "SystemFileAssociations\video\shell\GeminiWatermarkRemover" "" "Remove Watermark"
+  WriteRegStr HKCR "SystemFileAssociations\video\shell\GeminiWatermarkRemover" "Icon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr HKCR "SystemFileAssociations\video\shell\GeminiWatermarkRemover" "MultiSelectModel" "Player"
+  WriteRegStr HKCR "SystemFileAssociations\video\shell\GeminiWatermarkRemover\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --background --watermark "%1"'
+
+  WriteRegStr HKCR "SystemFileAssociations\.png\shell\GeminiWatermarkRemover" "" "Remove Watermark"
+  WriteRegStr HKCR "SystemFileAssociations\.png\shell\GeminiWatermarkRemover" "Icon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr HKCR "SystemFileAssociations\.png\shell\GeminiWatermarkRemover" "MultiSelectModel" "Player"
+  WriteRegStr HKCR "SystemFileAssociations\.png\shell\GeminiWatermarkRemover\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --background --watermark "%1"'
+
+  WriteRegStr HKCR "SystemFileAssociations\.jpg\shell\GeminiWatermarkRemover" "" "Remove Watermark"
+  WriteRegStr HKCR "SystemFileAssociations\.jpg\shell\GeminiWatermarkRemover" "Icon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr HKCR "SystemFileAssociations\.jpg\shell\GeminiWatermarkRemover" "MultiSelectModel" "Player"
+  WriteRegStr HKCR "SystemFileAssociations\.jpg\shell\GeminiWatermarkRemover\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --background --watermark "%1"'
+
+  WriteRegStr HKCR "SystemFileAssociations\.jpeg\shell\GeminiWatermarkRemover" "" "Remove Watermark"
+  WriteRegStr HKCR "SystemFileAssociations\.jpeg\shell\GeminiWatermarkRemover" "Icon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr HKCR "SystemFileAssociations\.jpeg\shell\GeminiWatermarkRemover" "MultiSelectModel" "Player"
+  WriteRegStr HKCR "SystemFileAssociations\.jpeg\shell\GeminiWatermarkRemover\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --background --watermark "%1"'
+
+  WriteRegStr HKCR "SystemFileAssociations\.webp\shell\GeminiWatermarkRemover" "" "Remove Watermark"
+  WriteRegStr HKCR "SystemFileAssociations\.webp\shell\GeminiWatermarkRemover" "Icon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr HKCR "SystemFileAssociations\.webp\shell\GeminiWatermarkRemover" "MultiSelectModel" "Player"
+  WriteRegStr HKCR "SystemFileAssociations\.webp\shell\GeminiWatermarkRemover\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --background --watermark "%1"'
+
+  WriteRegStr HKCR "SystemFileAssociations\.mp4\shell\GeminiWatermarkRemover" "" "Remove Watermark"
+  WriteRegStr HKCR "SystemFileAssociations\.mp4\shell\GeminiWatermarkRemover" "Icon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr HKCR "SystemFileAssociations\.mp4\shell\GeminiWatermarkRemover" "MultiSelectModel" "Player"
+  WriteRegStr HKCR "SystemFileAssociations\.mp4\shell\GeminiWatermarkRemover\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --background --watermark "%1"'
+
+  WriteRegStr HKCR "SystemFileAssociations\.mov\shell\GeminiWatermarkRemover" "" "Remove Watermark"
+  WriteRegStr HKCR "SystemFileAssociations\.mov\shell\GeminiWatermarkRemover" "Icon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr HKCR "SystemFileAssociations\.mov\shell\GeminiWatermarkRemover" "MultiSelectModel" "Player"
+  WriteRegStr HKCR "SystemFileAssociations\.mov\shell\GeminiWatermarkRemover\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --background --watermark "%1"'
+
+  WriteRegStr HKCR "SystemFileAssociations\.webm\shell\GeminiWatermarkRemover" "" "Remove Watermark"
+  WriteRegStr HKCR "SystemFileAssociations\.webm\shell\GeminiWatermarkRemover" "Icon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr HKCR "SystemFileAssociations\.webm\shell\GeminiWatermarkRemover" "MultiSelectModel" "Player"
+  WriteRegStr HKCR "SystemFileAssociations\.webm\shell\GeminiWatermarkRemover\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --background --watermark "%1"'
 !macroend
 
 !macro customUnInstall
   DeleteRegKey HKCR "Directory\shell\EXRConverterMOV"
   DeleteRegKey HKCR "Directory\shell\EXRConverterJPEG"
   DeleteRegKey HKCR "Directory\shell\EXRConverterCompare"
+  DeleteRegKey HKCR "Directory\shell\GeminiWatermarkRemover"
   DeleteRegKey HKCR "Directory\Background\shell\EXRConverterMOV"
   DeleteRegKey HKCR "Directory\Background\shell\EXRConverterJPEG"
   DeleteRegKey HKCR "Directory\Background\shell\EXRConverterCompare"
+  DeleteRegKey HKCR "Directory\Background\shell\GeminiWatermarkRemover"
   DeleteRegKey HKCR "SystemFileAssociations\.exr\shell\EXRConverterMOV"
   DeleteRegKey HKCR "SystemFileAssociations\.exr\shell\EXRConverterJPEG"
+  DeleteRegKey HKCR "SystemFileAssociations\image\shell\GeminiWatermarkRemover"
+  DeleteRegKey HKCR "SystemFileAssociations\video\shell\GeminiWatermarkRemover"
+  DeleteRegKey HKCR "SystemFileAssociations\.png\shell\GeminiWatermarkRemover"
+  DeleteRegKey HKCR "SystemFileAssociations\.jpg\shell\GeminiWatermarkRemover"
+  DeleteRegKey HKCR "SystemFileAssociations\.jpeg\shell\GeminiWatermarkRemover"
+  DeleteRegKey HKCR "SystemFileAssociations\.webp\shell\GeminiWatermarkRemover"
+  DeleteRegKey HKCR "SystemFileAssociations\.mp4\shell\GeminiWatermarkRemover"
+  DeleteRegKey HKCR "SystemFileAssociations\.mov\shell\GeminiWatermarkRemover"
+  DeleteRegKey HKCR "SystemFileAssociations\.webm\shell\GeminiWatermarkRemover"
   DeleteRegKey HKCR "Directory\shell\EXRConverter"
   DeleteRegKey HKCR "Directory\Background\shell\EXRConverter"
   DeleteRegKey HKCR "SystemFileAssociations\.exr\shell\EXRConverter"

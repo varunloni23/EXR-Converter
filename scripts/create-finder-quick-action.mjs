@@ -6,7 +6,7 @@ import { execSync } from 'child_process';
 const servicesDir = path.join(os.homedir(), 'Library', 'Services');
 fs.mkdirSync(servicesDir, { recursive: true });
 
-function createQuickAction({ workflowName, menuItemName, format, mode, isCompare }) {
+function createQuickAction({ workflowName, menuItemName, format, mode, isCompare, isWatermark }) {
   const workflowPath = path.join(servicesDir, workflowName);
   const contentsDir = path.join(workflowPath, 'Contents');
   fs.mkdirSync(contentsDir, { recursive: true });
@@ -46,16 +46,22 @@ function createQuickAction({ workflowName, menuItemName, format, mode, isCompare
   fs.writeFileSync(path.join(contentsDir, 'Info.plist'), infoPlistContent, 'utf8');
 
   const modeArg = mode ? `--mode ${mode}` : '';
-  const flag = isCompare ? '--compare' : `--background --format ${format} ${modeArg}`;
-  const scriptBody = `echo "=== [$(date)] ${menuItemName} triggered with args: $@ ===" >> /tmp/exr_quickaction.log
+  const flag = isWatermark
+    ? '--background --watermark'
+    : isCompare
+    ? '--compare'
+    : `--background --format ${format} ${modeArg}`;
+  const appProjectDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+  const scriptBody = `unset ELECTRON_RUN_AS_NODE
+echo "=== [$(date)] ${menuItemName} triggered with args: $@ ===" >> /tmp/exr_quickaction.log
 if [ -d "/Applications/EXR Converter.app" ]; then
     "/Applications/EXR Converter.app/Contents/MacOS/EXR Converter" ${flag} "$@" &
-elif [ -d "${path.resolve('release/mac-arm64/EXR Converter.app')}" ]; then
-    "${path.resolve('release/mac-arm64/EXR Converter.app')}/Contents/MacOS/EXR Converter" ${flag} "$@" &
-elif [ -d "${path.resolve('release/mac/EXR Converter.app')}" ]; then
-    "${path.resolve('release/mac/EXR Converter.app')}/Contents/MacOS/EXR Converter" ${flag} "$@" &
+elif [ -d "${path.join(appProjectDir, 'release/mac-arm64/EXR Converter.app')}" ]; then
+    "${path.join(appProjectDir, 'release/mac-arm64/EXR Converter.app')}/Contents/MacOS/EXR Converter" ${flag} "$@" &
+elif [ -d "${path.join(appProjectDir, 'release/mac/EXR Converter.app')}" ]; then
+    "${path.join(appProjectDir, 'release/mac/EXR Converter.app')}/Contents/MacOS/EXR Converter" ${flag} "$@" &
 else
-    (cd "${path.resolve('.')}" && npx electron . ${flag} "$@" &)
+    (cd "${appProjectDir}" && npx electron . ${flag} "$@" &)
 fi`;
 
   const documentWflowContent = `<?xml version="1.0" encoding="UTF-8"?>
@@ -286,6 +292,7 @@ const legacyWorkflows = [
   'Convert to MOV (Single Video, 40Mbps).workflow',
   'Convert to JPEG with EXR Converter.workflow',
   'Compare Folders with EXR Converter.workflow',
+  'Remove Watermark.workflow',
 ];
 
 for (const legacy of legacyWorkflows) {
@@ -321,6 +328,13 @@ createQuickAction({
   workflowName: 'Compare Folders.workflow',
   menuItemName: 'Compare Folders',
   isCompare: true,
+});
+
+// 4. Install Remove Gemini Watermark Quick Action
+createQuickAction({
+  workflowName: 'Remove Gemini Watermark.workflow',
+  menuItemName: 'Remove Gemini Watermark',
+  isWatermark: true,
 });
 
 // Flush LaunchServices cache

@@ -218,3 +218,87 @@ export interface UpdateStatus {
   totalBytes?: number;
   error?: string;
 }
+
+export type AppMode = 'exr' | 'watermark';
+
+export type WatermarkMediaType = 'image' | 'video';
+
+export type WatermarkItemStatus =
+  | 'pending'
+  | 'processing'
+  | 'cleaned'
+  | 'skipped'
+  | 'failed'
+  | 'cancelled';
+
+export type WatermarkOutputMode = 'auto' | 'subfolder' | 'suffix' | 'custom';
+
+export interface WatermarkOptions {
+  outputMode: WatermarkOutputMode;
+  customOutputDir?: string;
+  copySkippedInFolderMode?: boolean;
+  forceRemoveLowConfidence?: boolean;
+  highQualityVideoCleanup?: boolean;
+  use720pPipeline?: boolean;
+  videoGain?: number;
+}
+
+export interface WatermarkItem {
+  id: string;
+  inputPath: string;
+  fileName: string;
+  mediaType: WatermarkMediaType;
+  extension: string;
+  fileSizeBytes: number;
+  sourceRootFolder?: string;
+  relativePath?: string;
+  outputPath?: string;
+  width?: number;
+  height?: number;
+  durationSeconds?: number;
+  frameCount?: number;
+  status: WatermarkItemStatus;
+  progress: number;
+  watermarkDetected?: boolean;
+  watermarkInfo?: string;
+  skipReason?: string;
+  error?: string;
+  processingTimeMs?: number;
+}
+
+export interface WatermarkScanResult {
+  items: WatermarkItem[];
+  imageCount: number;
+  videoCount: number;
+  folderCount: number;
+  rootPaths: string[];
+}
+
+export interface WatermarkProgressEvent {
+  batchId: string;
+  itemId: string;
+  itemIndex: number;
+  totalItems: number;
+  itemProgress: number;
+  overallProgress: number;
+  status: WatermarkItemStatus;
+  outputPath?: string;
+  width?: number;
+  height?: number;
+  watermarkDetected?: boolean;
+  watermarkInfo?: string;
+  skipReason?: string;
+  error?: string;
+  processingTimeMs?: number;
+}
+
+export interface WatermarkBatchResult {
+  batchId: string;
+  items: WatermarkItem[];
+  cleanedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  cancelled: boolean;
+  primaryOutputDir: string;
+  elapsedMs: number;
+}

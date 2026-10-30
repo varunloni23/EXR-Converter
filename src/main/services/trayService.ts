@@ -9,6 +9,11 @@ export class TrayService {
   private mainWindow: BrowserWindow | null = null;
   private isQuitting: boolean = false;
   private hasShownTrayBalloon: boolean = false;
+  private onResetBackground: (() => void) | null = null;
+
+  public setBackgroundResetHandler(fn: () => void) {
+    this.onResetBackground = fn;
+  }
 
   public setMainWindow(win: BrowserWindow) {
     this.mainWindow = win;
@@ -69,6 +74,21 @@ export class TrayService {
         type: 'normal',
         click: () => this.showWindow(),
       },
+      {
+        label: 'Open Gemini Watermark Remover',
+        type: 'normal',
+        click: () => {
+          this.showWindow();
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send('app:openPath', {
+              path: '',
+              paths: [],
+              autoStart: false,
+              openWatermarkRemover: true,
+            });
+          }
+        },
+      },
       { type: 'separator' },
       {
         label: 'Check for Updates...',
@@ -93,6 +113,14 @@ export class TrayService {
   }
 
   public showWindow() {
+    if (this.onResetBackground) {
+      this.onResetBackground();
+    }
+    if (process.platform === 'darwin') {
+      try {
+        app.dock?.show();
+      } catch {}
+    }
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       if (this.mainWindow.isMinimized()) this.mainWindow.restore();
       this.mainWindow.show();

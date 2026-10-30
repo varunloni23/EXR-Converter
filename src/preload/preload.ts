@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import {
   ExrSequence,
   ConversionSettings,
@@ -11,6 +11,11 @@ import {
   FrameComparisonReport,
   FolderComparisonResult,
   UpdateStatus,
+  WatermarkBatchResult,
+  WatermarkItem,
+  WatermarkOptions,
+  WatermarkProgressEvent,
+  WatermarkScanResult,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -77,8 +82,20 @@ export interface ElectronAPI {
   getUpdateStatus: () => Promise<UpdateStatus>;
   quitAndInstallUpdate: () => Promise<boolean>;
 
+  // Gemini Watermark Remover
+  getPathForFile: (file: File) => string;
+  selectWatermarkFiles: () => Promise<string[] | null>;
+  selectWatermarkFolders: () => Promise<string[] | null>;
+  scanWatermarkPaths: (paths: string | string[]) => Promise<WatermarkScanResult>;
+  processWatermarkBatch: (
+    items: WatermarkItem[],
+    options?: WatermarkOptions
+  ) => Promise<WatermarkBatchResult>;
+  cancelWatermarkBatch: () => Promise<boolean>;
+
   // Subscriptions
-  onOpenPath: (callback: (data: { path: string; autoStart?: boolean } | string) => void) => () => void;
+  onOpenPath: (callback: (data: any) => void) => () => void;
+  onWatermarkProgress: (callback: (event: WatermarkProgressEvent) => void) => () => void;
   onProgress: (callback: (job: ConversionJob) => void) => () => void;
   onJobCompleted: (callback: (job: ConversionJob) => void) => () => void;
   onJobFailed: (callback: (job: ConversionJob) => void) => () => void;
@@ -135,10 +152,30 @@ const api: ElectronAPI = {
   getUpdateStatus: () => ipcRenderer.invoke('updater:getStatus'),
   quitAndInstallUpdate: () => ipcRenderer.invoke('updater:quitAndInstall'),
 
+  getPathForFile: (file: File) => {
+    try {
+      return webUtils.getPathForFile(file) || (file as any)?.path || '';
+    } catch {
+      return (file as any)?.path || '';
+    }
+  },
+  selectWatermarkFiles: () => ipcRenderer.invoke('watermark:selectFiles'),
+  selectWatermarkFolders: () => ipcRenderer.invoke('watermark:selectFolders'),
+  scanWatermarkPaths: (paths) => ipcRenderer.invoke('watermark:scanPaths', paths),
+  processWatermarkBatch: (items, options) =>
+    ipcRenderer.invoke('watermark:processBatch', items, options),
+  cancelWatermarkBatch: () => ipcRenderer.invoke('watermark:cancel'),
+
   onOpenPath: (callback) => {
-    const handler = (_: any, data: { path: string; autoStart?: boolean } | string) => callback(data);
+    const handler = (_: any, data: any) => callback(data);
     ipcRenderer.on('app:openPath', handler);
     return () => ipcRenderer.removeListener('app:openPath', handler);
+  },
+
+  onWatermarkProgress: (callback) => {
+    const handler = (_: any, event: WatermarkProgressEvent) => callback(event);
+    ipcRenderer.on('watermark:progress', handler);
+    return () => ipcRenderer.removeListener('watermark:progress', handler);
   },
 
   onProgress: (callback) => {

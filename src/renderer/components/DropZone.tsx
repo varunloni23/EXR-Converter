@@ -33,7 +33,7 @@ export const DropZone: React.FC<DropZoneProps> = ({
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const paths = Array.from(e.dataTransfer.files)
-        .map((f: any) => f.path)
+        .map((f: any) => window.electronAPI?.getPathForFile?.(f) || f.path)
         .filter(Boolean);
       if (paths.length === 1) {
         onDropPath(paths[0]);

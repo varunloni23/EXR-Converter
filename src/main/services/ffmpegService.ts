@@ -418,6 +418,7 @@ export class FFmpegService {
 
       const child = spawn(ffmpegBin, fullArgs, {
         stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
       });
 
       this.activeProcesses.set(job.id, {
@@ -588,7 +589,7 @@ export class FFmpegService {
           `Converting EXR sequence directly to JPEG for job ${job.id}`,
           `Command: ${ffmpegBin} ${args.join(' ')}`
         );
-        const proc = spawn(ffmpegBin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        const proc = spawn(ffmpegBin, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
         this.activeProcesses.set(job.id, { process: proc, isPaused: false, outputPath: job.outputPath });
 
         let currentFrame = 0;
@@ -683,7 +684,7 @@ export class FFmpegService {
           ];
 
           await new Promise<void>((fResolve, fReject) => {
-            const p = spawn(ffmpegBin, frameArgs, { stdio: ['ignore', 'ignore', 'ignore'] });
+            const p = spawn(ffmpegBin, frameArgs, { stdio: ['ignore', 'ignore', 'ignore'], windowsHide: true });
             this.activeProcesses.set(`${job.id}_frame_${processed}`, { process: p, isPaused: false, outputPath: destPath });
             p.on('close', (c) => {
               this.activeProcesses.delete(`${job.id}_frame_${processed}`);
@@ -778,7 +779,7 @@ export class FFmpegService {
 
     try {
       if (os.platform() === 'win32' && item.process.pid) {
-        spawn('taskkill', ['/pid', String(item.process.pid), '/f', '/t']);
+        spawn('taskkill', ['/pid', String(item.process.pid), '/f', '/t'], { windowsHide: true });
       } else {
         item.process.kill('SIGKILL');
       }
@@ -859,7 +860,7 @@ export class FFmpegService {
         `Command: ${ffmpegBin} ${extractArgs.join(' ')}`
       );
 
-      const child = spawn(ffmpegBin, extractArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(ffmpegBin, extractArgs, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
       this.activeProcesses.set(job.id, { process: child, isPaused: false, outputPath: job.outputPath });
 
       child.stdout.on('data', (data: Buffer) => {

@@ -1,6 +1,6 @@
 {
   "name": "exr-converter",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Professional EXR sequence converter to editorial-ready video",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -12,6 +12,7 @@
     "package:win": "node scripts/fetch-binaries.mjs && tsc && vite build && electron-builder --win --x64",
     "package:all": "node scripts/fetch-binaries.mjs && tsc && vite build && electron-builder -mw",
     "test:e2e": "tsx test/e2e-conversion.test.ts",
+    "test:watermark": "tsx test/watermark-remover.test.ts",
     "preview": "vite preview"
   },
   "keywords": [

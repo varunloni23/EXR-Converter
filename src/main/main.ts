@@ -18,7 +18,21 @@ import { settingsService } from './services/settingsService';
 import { historyService } from './services/historyService';
 import { updateService } from './services/updateService';
 import { trayService } from './services/trayService';
-import { ConversionSettings, ExrSequence, FrameComparisonReport, FolderComparisonResult } from '../shared/types';
+import { watermarkService } from './services/watermarkService';
+import { QuickActionService } from './services/quickActionService';
+import {
+  LaunchTarget,
+  parseLaunchArgs,
+  mergeLaunchTargets,
+} from './services/launchArgsParser';
+import {
+  ConversionSettings,
+  ExrSequence,
+  FrameComparisonReport,
+  FolderComparisonResult,
+  WatermarkItem,
+  WatermarkOptions,
+} from '../shared/types';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -33,154 +47,85 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+// Ignore EPIPE errors on stdio streams when running as a packaged GUI app without an attached terminal
+process.stdout?.on('error', (err: any) => {
+  if (err?.code === 'EPIPE' || err?.syscall === 'write') return;
+});
+process.stderr?.on('error', (err: any) => {
+  if (err?.code === 'EPIPE' || err?.syscall === 'write') return;
+});
+process.on('uncaughtException', (err: any) => {
+  if (err?.code === 'EPIPE' || err?.message?.includes('EPIPE') || (err as any)?.syscall === 'write') return;
+  console.error('Uncaught Exception:', err);
+});
+
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.exrconverter.app');
 }
 
-export interface LaunchTarget {
-  path: string;
-  paths?: string[];
-  autoStart: boolean;
-  format?: 'mov' | 'jpg' | 'mp4';
-  mode?: 'sequence' | 'individual';
-  openComparison?: boolean;
-}
-
-function isAppOrSystemArg(arg: string): boolean {
-  if (!arg || arg.startsWith('-')) return true;
-  const base = path.basename(arg).toLowerCase();
-  const lower = arg.toLowerCase().replace(/\\/g, '/');
-
-  // Electron / App executable names
-  if (base === 'electron' || base === 'electron.exe') return true;
-  if (base === 'exr converter' || base === 'exr converter.exe' || base === 'exr-converter' || base === 'exr-converter.exe') return true;
-  if (lower.includes('node_modules/electron') || lower.endsWith('/electron') || lower.endsWith('/electron.exe')) return true;
-  if (lower.includes('.app/contents/macos/electron') || lower.includes('.app/contents/macos/exr converter')) return true;
-
-  // Working directory, source scripts, or config files
-  if (arg === '.' || path.resolve(arg) === path.resolve(process.cwd())) return true;
-  if (
-    base.endsWith('.js') ||
-    base.endsWith('.ts') ||
-    base.endsWith('.mjs') ||
-    base.endsWith('.cjs') ||
-    base.endsWith('.json') ||
-    base.endsWith('.html') ||
-    base.endsWith('.css') ||
-    base.endsWith('.map') ||
-    base.endsWith('.lock')
-  ) {
-    return true;
-  }
-
-  // URLs or devtools
-  if (arg.startsWith('chrome-extension://') || arg.startsWith('devtools://')) return true;
-
-  return false;
-}
-
-function parseLaunchArgs(argv: string[]): LaunchTarget | null {
-  const paths: string[] = [];
-  let format: 'mov' | 'jpg' | 'mp4' | undefined;
-  let mode: 'sequence' | 'individual' | undefined;
-  const isCompare = argv.includes('--compare') || argv.includes('-c');
-
-  // Skip argv[0] which is always the executable binary itself
-  const candidateArgs = argv.slice(1);
-
-  for (let i = 0; i < candidateArgs.length; i++) {
-    const arg = candidateArgs[i];
-    if ((arg === '--format' || arg === '-f') && i + 1 < candidateArgs.length) {
-      const f = candidateArgs[i + 1].toLowerCase();
-      if (f === 'mov' || f === 'jpg' || f === 'jpeg' || f === 'mp4') {
-        format = (f === 'jpeg' ? 'jpg' : f) as 'mov' | 'jpg' | 'mp4';
-      }
-      i++;
-      continue;
-    }
-    if (arg.startsWith('--format=')) {
-      const f = arg.split('=')[1]?.toLowerCase();
-      if (f === 'mov' || f === 'jpg' || f === 'jpeg' || f === 'mp4') {
-        format = (f === 'jpeg' ? 'jpg' : f) as 'mov' | 'jpg' | 'mp4';
-      }
-      continue;
-    }
-    if (arg === '--mode' && i + 1 < candidateArgs.length) {
-      const m = candidateArgs[i + 1].toLowerCase();
-      if (m === 'sequence' || m === 'individual') {
-        mode = m as any;
-      }
-      i++;
-      continue;
-    }
-    if (arg.startsWith('--mode=')) {
-      const m = arg.split('=')[1]?.toLowerCase();
-      if (m === 'sequence' || m === 'individual') {
-        mode = m as any;
-      }
-      continue;
-    }
-
-    if (isAppOrSystemArg(arg)) continue;
-
-    try {
-      if (fs.existsSync(arg)) {
-        const stat = fs.statSync(arg);
-        if (stat.isDirectory()) {
-          paths.push(path.resolve(arg));
-        } else if (stat.isFile()) {
-          const ext = path.extname(arg).toLowerCase();
-          const validExts = ['.exr', '.mov', '.mp4', '.mkv', '.avi', '.jpg', '.jpeg', '.png'];
-          if (validExts.includes(ext)) {
-            paths.push(path.resolve(arg));
-          }
-        }
-      }
-    } catch (e) {}
-  }
-
-  if (isCompare) {
-    return {
-      path: paths[0] || '',
-      paths,
-      autoStart: false,
-      openComparison: true,
-    };
-  }
-
-  if (paths.length === 0) return null;
-  return {
-    path: paths[0],
-    paths,
-    autoStart: true,
-    format,
-    mode,
-  };
-}
+export type { LaunchTarget };
+export { parseLaunchArgs, mergeLaunchTargets };
 
 let initialTarget: LaunchTarget | null = null;
+let initialTargetUpdatedAt = 0;
 let isRendererReady = false;
+let pendingDispatchTarget: LaunchTarget | null = null;
+let pendingDispatchTimer: ReturnType<typeof setTimeout> | null = null;
 
 const parsedTarget = parseLaunchArgs(process.argv);
 const isCompareLaunch = process.argv.includes('--compare') || process.argv.includes('-c');
-const isBackgroundLaunch = false; // Always show window so user sees conversion progress
+let isBackgroundLaunch =
+  !isCompareLaunch &&
+  (process.argv.includes('--background') ||
+    process.argv.includes('-b') ||
+    Boolean(parsedTarget?.isBackground));
+
+export function setBackgroundLaunch(val: boolean) {
+  isBackgroundLaunch = val;
+  if (!val && process.platform === 'darwin') {
+    try {
+      app.dock?.show();
+    } catch {}
+  }
+}
 
 if (parsedTarget) {
   initialTarget = parsedTarget;
+  initialTargetUpdatedAt = Date.now();
 }
 
 function dispatchOpenPath(target: LaunchTarget) {
-  initialTarget = target;
+  const isBg = Boolean(target.isBackground || isBackgroundLaunch);
   if (mainWindow && !mainWindow.isDestroyed() && isRendererReady) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-    logger.info(`Dispatching app:openPath to renderer: ${target.path} (format=${target.format || 'default'}, mode=${target.mode || 'default'}, compare=${Boolean(target.openComparison)})`);
-    mainWindow.webContents.send('app:openPath', target);
-    initialTarget = null;
+    if (!isBg) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+
+    // Coalesce rapid multi-selection launches from Windows Explorer ("second-instance" burst)
+    pendingDispatchTarget = mergeLaunchTargets(pendingDispatchTarget, target);
+    if (pendingDispatchTimer) {
+      clearTimeout(pendingDispatchTimer);
+    }
+    pendingDispatchTimer = setTimeout(() => {
+      const toSend = pendingDispatchTarget;
+      pendingDispatchTarget = null;
+      pendingDispatchTimer = null;
+      if (toSend && mainWindow && !mainWindow.isDestroyed()) {
+        logger.info(
+          `Dispatching coalesced app:openPath to renderer: ${toSend.paths?.length || 1} item(s), first=${toSend.path} (watermark=${Boolean(toSend.openWatermarkRemover)}, format=${toSend.format || 'default'}, compare=${Boolean(toSend.openComparison)})`
+        );
+        mainWindow.webContents.send('app:openPath', toSend);
+      }
+    }, 280);
   } else {
-    logger.info(`Queued initialTarget for renderer initialization: ${target.path} (autoStart=${target.autoStart}, compare=${Boolean(target.openComparison)})`);
+    initialTarget = mergeLaunchTargets(initialTarget, target);
+    initialTargetUpdatedAt = Date.now();
+    logger.info(
+      `Queued/merged initialTarget for renderer initialization: ${initialTarget.paths?.length || 1} item(s), first=${initialTarget.path} (watermark=${Boolean(initialTarget.openWatermarkRemover)})`
+    );
   }
 }
 
@@ -190,21 +135,47 @@ if (!gotTheLock) {
 } else {
   app.on('second-instance', (_, commandLine, __, additionalData: any) => {
     const rawArgs = (additionalData && Array.isArray(additionalData.argv)) ? additionalData.argv : commandLine;
-    const isCompare = rawArgs.includes('--compare') || rawArgs.includes('-c');
     const parsed = parseLaunchArgs(rawArgs);
+    const isBg =
+      rawArgs.includes('--background') ||
+      rawArgs.includes('-b') ||
+      Boolean(parsed?.isBackground);
+    const isCompare =
+      rawArgs.includes('--compare') ||
+      rawArgs.includes('-c') ||
+      Boolean(parsed?.openComparison);
+
     if (parsed) {
       if (isCompare) {
         parsed.openComparison = true;
         parsed.autoStart = false;
       }
-      if (mainWindow && !mainWindow.isDestroyed()) {
+      if (isBg) {
+        parsed.isBackground = true;
+        isBackgroundLaunch = true;
+      }
+      if (!isBg && !parsed.isBackground && mainWindow && !mainWindow.isDestroyed()) {
+        isBackgroundLaunch = false;
+        if (process.platform === 'darwin') {
+          try {
+            app.dock?.show();
+          } catch {}
+        }
         if (mainWindow.isMinimized()) mainWindow.restore();
         mainWindow.show();
         mainWindow.focus();
       }
-      logger.info(`Received context-menu launch from second instance: ${parsed.path} (format=${parsed.format || 'default'}, mode=${parsed.mode || 'default'}, compare=${Boolean(parsed.openComparison)})`);
+      logger.info(
+        `Received context-menu launch from second instance: ${parsed.path} (format=${parsed.format || 'default'}, mode=${parsed.mode || 'default'}, compare=${Boolean(parsed.openComparison)}, background=${Boolean(parsed.isBackground)})`
+      );
       dispatchOpenPath(parsed);
-    } else if (mainWindow && !mainWindow.isDestroyed()) {
+    } else if (!isBg && mainWindow && !mainWindow.isDestroyed()) {
+      isBackgroundLaunch = false;
+      if (process.platform === 'darwin') {
+        try {
+          app.dock?.show();
+        } catch {}
+      }
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
@@ -215,13 +186,25 @@ if (!gotTheLock) {
 app.on('open-file', (event, filePath) => {
   event.preventDefault();
   logger.info(`Received open-file event: ${filePath}`);
-  dispatchOpenPath({ path: filePath, autoStart: true });
+  const parsed = parseLaunchArgs([process.execPath, filePath]);
+  dispatchOpenPath(parsed || { path: filePath, autoStart: true, isBackground: true });
 });
 
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(forceShow: boolean = false) {
   const shouldShow = forceShow || !isBackgroundLaunch;
+  if (process.platform === 'darwin') {
+    if (shouldShow) {
+      try {
+        app.dock?.show();
+      } catch {}
+    } else {
+      try {
+        app.dock?.hide();
+      } catch {}
+    }
+  }
   mainWindow = new BrowserWindow({
     width: 1320,
     height: 860,
@@ -230,6 +213,7 @@ function createWindow(forceShow: boolean = false) {
     backgroundColor: '#0B0D10',
     title: 'EXR Converter',
     show: shouldShow,
+    skipTaskbar: isBackgroundLaunch,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     autoHideMenuBar: true,
     webPreferences: {
@@ -240,9 +224,20 @@ function createWindow(forceShow: boolean = false) {
     },
   });
 
+  logger.info(`BrowserWindow created. show=${shouldShow}, isBackgroundLaunch=${isBackgroundLaunch}`);
+
+  mainWindow.on('show', () => {
+    logger.info('BrowserWindow "show" event triggered');
+  });
+
+  mainWindow.on('hide', () => {
+    logger.info('BrowserWindow "hide" event triggered');
+  });
+
   conversionManager.setMainWindow(mainWindow);
   updateService.setWindow(mainWindow);
   trayService.setMainWindow(mainWindow);
+  watermarkService.setMainWindow(mainWindow);
 
   // Close to tray on Windows and Mac unless explicitly quitting
   mainWindow.on('close', (event) => {
@@ -288,23 +283,98 @@ function createWindow(forceShow: boolean = false) {
     mainWindow = null;
     isRendererReady = false;
     conversionManager.setMainWindow(null);
+    watermarkService.setMainWindow(null);
   });
 }
 
+const videoFrameCache = new Map<string, Uint8Array>();
+
 app.whenReady().then(() => {
   logger.init();
-
-  protocol.handle('media', (request) => {
+  if (isBackgroundLaunch && process.platform === 'darwin') {
     try {
-      let filePath = decodeURIComponent(request.url.slice('media://'.length));
-      if (process.platform === 'win32') {
-        filePath = filePath.replace(/^\//, '').replace(/\\/g, '/');
-        const fileUrl = filePath.startsWith('file:///') ? filePath : `file:///${filePath}`;
-        return net.fetch(fileUrl);
-      } else {
-        if (!filePath.startsWith('/')) filePath = '/' + filePath;
-        return net.fetch(`file://${filePath}`);
+      app.dock?.hide();
+    } catch {}
+  }
+  QuickActionService.ensureMacQuickActions();
+
+  protocol.handle('media', async (request) => {
+    try {
+      const [rawTarget, rawQuery = ''] = request.url.slice('media://'.length).split('?');
+
+      // Lossless PNG frame extraction for video Before/After preview (works across H.264/HEVC/ProRes/MOV/MP4)
+      if (rawTarget.startsWith('frame/')) {
+        let filePath = decodeURIComponent(rawTarget.slice('frame/'.length));
+        if (process.platform !== 'win32' && !filePath.startsWith('/')) {
+          filePath = '/' + filePath;
+        }
+        const params = new URLSearchParams(rawQuery);
+        const seekSec = Math.max(0, Number(params.get('t') || '0.5') || 0);
+        const versionKey = params.get('v') || '0';
+        const cacheKey = `${filePath}|${seekSec.toFixed(2)}|${versionKey}`;
+
+        const cached = videoFrameCache.get(cacheKey);
+        if (cached) {
+          return new Response(cached as unknown as BodyInit, {
+            headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' },
+          });
+        }
+
+        const ffmpegBin = ffmpegService.getFfmpegPath();
+        const pngBuf = await new Promise<Buffer>((resolve, reject) => {
+          const args = [
+            '-hide_banner',
+            '-v',
+            'error',
+            ...(seekSec > 0 ? ['-ss', seekSec.toFixed(3)] : []),
+            '-i',
+            filePath,
+            '-frames:v',
+            '1',
+            '-f',
+            'image2pipe',
+            '-vcodec',
+            'png',
+            'pipe:1',
+          ];
+          const proc = spawn(ffmpegBin, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+          const chunks: Buffer[] = [];
+          let stderr = '';
+          proc.stdout.on('data', (c: Buffer) => chunks.push(c));
+          proc.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
+          proc.on('error', reject);
+          proc.on('close', (code) => {
+            const out = Buffer.concat(chunks);
+            if (code !== 0 || out.length === 0) {
+              reject(new Error(`Frame preview failed (${code}): ${stderr.trim()}`));
+            } else {
+              resolve(out);
+            }
+          });
+        });
+
+        const bytes = new Uint8Array(pngBuf);
+        if (videoFrameCache.size >= 16) {
+          const oldest = videoFrameCache.keys().next().value;
+          if (oldest) videoFrameCache.delete(oldest);
+        }
+        videoFrameCache.set(cacheKey, bytes);
+
+        return new Response(bytes as unknown as BodyInit, {
+          headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' },
+        });
       }
+
+      let filePath: string;
+      if (rawTarget.startsWith('local/')) {
+        filePath = decodeURIComponent(rawTarget.slice('local/'.length));
+      } else {
+        filePath = decodeURIComponent(rawTarget.replace(/\/$/, ''));
+      }
+      if (process.platform !== 'win32' && !filePath.startsWith('/')) {
+        filePath = '/' + filePath;
+      }
+      return net.fetch(pathToFileURL(filePath).toString());
     } catch (err) {
       logger.error(`Media protocol error: ${err}`);
       return new Response('File not found', { status: 404 });
@@ -314,6 +384,9 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   createWindow();
   trayService.init();
+  trayService.setBackgroundResetHandler(() => {
+    isBackgroundLaunch = false;
+  });
   if (mainWindow) {
     trayService.setMainWindow(mainWindow);
   }
@@ -327,6 +400,16 @@ app.whenReady().then(() => {
   }, 15 * 60 * 1000);
 
   app.on('activate', () => {
+    logger.info(`app activate event received (isBackgroundLaunch=${isBackgroundLaunch})`);
+    if (isBackgroundLaunch) {
+      logger.info('Ignoring activate event because running in background mode');
+      return;
+    }
+    if (process.platform === 'darwin') {
+      try {
+        app.dock?.show();
+      } catch {}
+    }
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
@@ -353,10 +436,14 @@ function registerIpcHandlers() {
 
   // 0. Initial Launch Target (from right-click context menu or file open)
   ipcMain.handle('app:getInitialPath', async () => {
+    // Allow brief settle window if multi-selected items from Explorer are still spawning second-instance events
+    if (initialTarget && Date.now() - initialTargetUpdatedAt < 300) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
     isRendererReady = true;
     const t = initialTarget;
     initialTarget = null;
-    logger.info(`Renderer requested initialPath: ${t ? t.path : 'none'}`);
+    logger.info(`Renderer requested initialPath: ${t ? `${t.paths?.length || 1} item(s), first=${t.path}` : 'none'}`);
     return t;
   });
 
@@ -589,7 +676,7 @@ function registerIpcHandlers() {
         patternPath,
       ];
 
-      const child = spawn(ffmpegBin, args);
+      const child = spawn(ffmpegBin, args, { windowsHide: true });
       child.on('close', async (code) => {
         if (code === 0) {
           logger.success('Sample EXR sequence generated successfully.');
@@ -659,5 +746,32 @@ function registerIpcHandlers() {
   ipcMain.handle('updater:quitAndInstall', async () => {
     updateService.quitAndInstall();
     return true;
+  });
+
+  // 14. Gemini Watermark Remover (Single/Multiple Files & Single/Multiple Folders)
+  ipcMain.handle('watermark:selectFiles', async () => {
+    return watermarkService.selectFilesDialog(mainWindow);
+  });
+
+  ipcMain.handle('watermark:selectFolders', async () => {
+    return watermarkService.selectFoldersDialog(mainWindow);
+  });
+
+  ipcMain.handle('watermark:scanPaths', async (_, paths: string | string[]) => {
+    return watermarkService.scanPaths(paths);
+  });
+
+  ipcMain.handle(
+    'watermark:processBatch',
+    async (_, items: WatermarkItem[], options?: WatermarkOptions) => {
+      videoFrameCache.clear();
+      const res = await watermarkService.processBatch(items, options);
+      videoFrameCache.clear();
+      return res;
+    }
+  );
+
+  ipcMain.handle('watermark:cancel', async () => {
+    return watermarkService.cancelBatch();
   });
 }

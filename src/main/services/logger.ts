@@ -8,6 +8,18 @@ import { LogEntry } from '../../shared/types';
 // In pure Node.js (e.g. tests), electron is a string path to the binary
 const electronApp = typeof electron === 'object' && electron !== null ? (electron as any).app : null;
 
+// Prevent unhandled EPIPE crashes when stdout/stderr streams are closed or broken in packaged app
+if (process.stdout) {
+  process.stdout.on('error', (err: any) => {
+    if (err?.code === 'EPIPE' || err?.syscall === 'write') return;
+  });
+}
+if (process.stderr) {
+  process.stderr.on('error', (err: any) => {
+    if (err?.code === 'EPIPE' || err?.syscall === 'write') return;
+  });
+}
+
 class Logger {
   private logs: LogEntry[] = [];
   private logFilePath: string = '';
@@ -62,7 +74,13 @@ class Logger {
       details ? ` | ${details}` : ''
     }\n`;
 
-    console.log(`[${timeStr}] [${level.toUpperCase()}] ${message}`);
+    if (process.stdout && !process.stdout.destroyed && (process.stdout as any).writable !== false) {
+      try {
+        console.log(`[${timeStr}] [${level.toUpperCase()}] ${message}`);
+      } catch {
+        // Ignore EPIPE or broken stdout pipes when running in packaged GUI environments
+      }
+    }
 
     if (this.initialized && this.logFilePath) {
       fs.appendFile(this.logFilePath, logLine, () => {});
